@@ -100,3 +100,22 @@ class Dispositivo(Base):
     estado_operativo = Column(String(30), nullable=False, default="activo")
     tipo = relationship("TipoDispositivo", back_populates="dispositivos")
     rack = relationship("BastidorRack", back_populates="dispositivos")
+
+class Subred(Base):
+    __tablename__ = "subredes"
+
+    id_vlan = Column(Integer, primary_key=True, index=True)
+    etiqueta_vlan = Column(Integer, nullable=False)
+    cidr = Column(String(50), nullable=False)
+    nombre_segmento = Column(String(100), nullable=False)
+    descripcion = Column(String)
+
+
+class DireccionIP(Base):
+    __tablename__ = "direcciones_ip"
+
+    id_ip = Column(Integer, primary_key=True, index=True)
+    id_subred = Column(Integer, ForeignKey("subredes.id_vlan", ondelete="CASCADE"), nullable=False)
+    direccion = Column(String(45), nullable=False)
+    estado_asignacion = Column(String(30), nullable=False, default="libre")
+    proposito = Column(String(100))
