@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { formatApiError } from '../utils/errors';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -29,13 +30,13 @@ export default function Login() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || 'No se pudo iniciar sesión');
+        throw new Error(formatApiError(data.detail, 'No se pudo iniciar sesión'));
       }
 
       localStorage.setItem('netinventory_token', data.access_token);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message || 'Error desconocido');
+      setError(formatApiError(err, 'Error desconocido'));
     } finally {
       setLoading(false);
     }

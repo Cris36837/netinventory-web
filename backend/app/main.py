@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers.auth import router as auth_router
 from .routers.devices import router as devices_router
+from .routers.ipam import router as ipam_router
 from .routers.users import router as users_router
 from .routers.ipam import router as ipam_router
 

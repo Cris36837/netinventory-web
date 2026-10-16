@@ -2,7 +2,7 @@
 
 Sistema web para gestión y monitoreo de infraestructura de red. El repositorio contiene una aplicación React/Vite, una API FastAPI y servicios PostgreSQL y Redis ejecutables con Docker Compose.
 
-> El alcance actual implementa autenticación, usuarios/roles y el CRUD básico de dispositivos del Sprint 3. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
+> El alcance actual incluye autenticación, usuarios/roles, gestión de activos e IPAM. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
 
 ## Requisitos
 
@@ -113,6 +113,12 @@ Todas las rutas salvo `POST /api/v1/auth/login` requieren `Authorization: Bearer
 Los dispositivos se almacenan en `DISPOSITIVOS` y se relacionan con `TIPOS_DISPOSITIVO`; se puede registrar un activo sin rack. El catálogo inicial ofrece las categorías Servidor, Switch, Router, PC e Impresora. Host, FQDN, número de serie e IP de gestión son únicos cuando se proporcionan; la IP se valida antes de guardarla.
 
 El formulario del dashboard permite registrar y editar activos. Admin puede además crear usuarios, asignar roles y activar/desactivar cuentas. Técnico puede registrar y modificar dispositivos. Auditor únicamente puede consultar los dispositivos.
+
+## Sprint 4: integridad de activos y gestión IPAM
+
+El dashboard permite crear subredes CIDR sin traslapes, consultar sus direcciones utilizables en páginas, reservar una IP libre y liberar una reserva. Las IP configuradas en activos aparecen como ocupadas; las direcciones de red y broadcast IPv4 no se ofrecen como hosts. Técnicos y Admin pueden gestionar subredes y reservas; Auditor puede consultar la tabla IPAM.
+
+La API expone `GET/POST /api/v1/ipam/subnets`, `GET /api/v1/ipam/subnets/{id}/addresses`, `POST /api/v1/ipam/subnets/{id}/reservations` y `DELETE /api/v1/ipam/reservations/{id_ip}`. El alta y edición de activos valida y normaliza IP y MAC, y rechaza IPs reservadas. Las restricciones únicas en la base de datos impiden repetir las IP y MAC entre activos, así como repetir una IP reservada.
 
 ### Inicialización de la base de datos
 

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from .database import AsyncSessionLocal, Base, engine
 from .models import Rol, TipoDispositivo
@@ -21,6 +21,15 @@ INITIAL_DEVICE_TYPES = (
 async def initialize_database() -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        await connection.execute(
+            text("ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS mac_address VARCHAR(17)")
+        )
+        await connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_dispositivos_mac_address "
+                "ON dispositivos (mac_address)"
+            )
+        )
 
     async with AsyncSessionLocal() as session:
         for role_id, name, description in INITIAL_ROLES:

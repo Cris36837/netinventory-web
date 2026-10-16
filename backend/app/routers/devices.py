@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import BastidorRack, Dispositivo, TipoDispositivo, Usuario
+from ..models import BastidorRack, DireccionIP, Dispositivo, TipoDispositivo, Usuario
 from ..schemas import DeviceCreate, DeviceResponse, DeviceTypeResponse, DeviceUpdate
 from .auth import get_current_user, require_roles
 
@@ -28,6 +28,7 @@ def serialize_device(device: Dispositivo) -> DeviceResponse:
         fqdn=device.fqdn,
         numero_serie=device.numero_serie,
         ip_gestion=device.ip_gestion,
+        mac_address=device.mac_address,
         ru_inicio=device.ru_inicio,
         estado_operativo=device.estado_operativo,
     )
@@ -94,6 +95,15 @@ async def create_device(
     db: AsyncSession = Depends(get_db),
 ):
     await ensure_references(db, body.id_tipo, body.id_rack)
+    if body.ip_gestion:
+        reserved = await db.scalar(
+            select(DireccionIP.id_ip).where(
+                DireccionIP.direccion == body.ip_gestion,
+                DireccionIP.estado_asignacion == "reservada",
+            )
+        )
+        if reserved is not None:
+            raise HTTPException(status_code=409, detail="La IP ya está reservada en IPAM")
     device = Dispositivo(**body.model_dump())
     db.add(device)
     try:
@@ -102,7 +112,7 @@ async def create_device(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="El nombre de host, FQDN, número de serie o IP ya está registrado",
+            detail="El nombre de host, FQDN, número de serie, IP o MAC ya está registrado",
         ) from exc
 
     result = await db.execute(
@@ -155,6 +165,16 @@ async def update_device(
         changes.get("id_tipo", device.id_tipo),
         changes.get("id_rack", device.id_rack),
     )
+    ip_gestion = changes.get("ip_gestion", device.ip_gestion)
+    if ip_gestion:
+        reserved = await db.scalar(
+            select(DireccionIP.id_ip).where(
+                DireccionIP.direccion == ip_gestion,
+                DireccionIP.estado_asignacion == "reservada",
+            )
+        )
+        if reserved is not None:
+            raise HTTPException(status_code=409, detail="La IP ya está reservada en IPAM")
     for field, value in changes.items():
         setattr(device, field, value)
 
@@ -164,7 +184,7 @@ async def update_device(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="El nombre de host, FQDN, número de serie o IP ya está registrado",
+            detail="El nombre de host, FQDN, número de serie, IP o MAC ya está registrado",
         ) from exc
 
     result = await db.execute(

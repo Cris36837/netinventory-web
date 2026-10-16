@@ -82,6 +82,24 @@ CREATE TABLE IF NOT EXISTS dispositivos (
     fqdn VARCHAR(253) UNIQUE,
     numero_serie VARCHAR(120) UNIQUE,
     ip_gestion VARCHAR(45) UNIQUE,
+    mac_address VARCHAR(17),
     ru_inicio INT,
-    estado_operativo VARCHAR(30) NOT NULL DEFAULT 'activo'
+    estado_operativo VARCHAR(30) NOT NULL DEFAULT 'activo',
+    CONSTRAINT uq_dispositivos_mac_address UNIQUE (mac_address)
+);
+
+CREATE TABLE IF NOT EXISTS subredes (
+    id_vlan SERIAL PRIMARY KEY,
+    etiqueta_vlan INT NOT NULL UNIQUE CHECK (etiqueta_vlan BETWEEN 1 AND 4094),
+    cidr VARCHAR(50) NOT NULL UNIQUE,
+    nombre_segmento VARCHAR(100) NOT NULL,
+    descripcion VARCHAR(1000)
+);
+
+CREATE TABLE IF NOT EXISTS direcciones_ip (
+    id_ip SERIAL PRIMARY KEY,
+    id_subred INT NOT NULL REFERENCES subredes(id_vlan) ON DELETE CASCADE,
+    direccion VARCHAR(45) NOT NULL UNIQUE,
+    estado_asignacion VARCHAR(30) NOT NULL DEFAULT 'reservada',
+    proposito VARCHAR(100)
 );

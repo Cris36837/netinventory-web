@@ -1,4 +1,5 @@
 import ipaddress
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -55,6 +56,7 @@ class DeviceCreate(BaseModel):
     fqdn: str | None = Field(default=None, max_length=253)
     numero_serie: str | None = Field(default=None, max_length=120)
     ip_gestion: str | None = Field(default=None, max_length=45)
+    mac_address: str | None = Field(default=None, max_length=17)
     ru_inicio: int | None = Field(default=None, ge=1, le=100)
     estado_operativo: DeviceState = "activo"
 
@@ -68,6 +70,16 @@ class DeviceCreate(BaseModel):
         except ValueError as exc:
             raise ValueError("La IP de gestión no es válida") from exc
 
+    @field_validator("mac_address")
+    @classmethod
+    def validate_mac_address(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip().replace("-", ":").upper()
+        if not re.fullmatch(r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}", normalized):
+            raise ValueError("La dirección MAC debe tener el formato AA:BB:CC:DD:EE:FF")
+        return normalized
+
 
 class DeviceUpdate(BaseModel):
     id_tipo: int | None = None
@@ -76,6 +88,7 @@ class DeviceUpdate(BaseModel):
     fqdn: str | None = Field(default=None, max_length=253)
     numero_serie: str | None = Field(default=None, max_length=120)
     ip_gestion: str | None = Field(default=None, max_length=45)
+    mac_address: str | None = Field(default=None, max_length=17)
     ru_inicio: int | None = Field(default=None, ge=1, le=100)
     estado_operativo: DeviceState | None = None
 
@@ -88,6 +101,11 @@ class DeviceUpdate(BaseModel):
             return str(ipaddress.ip_address(value.strip()))
         except ValueError as exc:
             raise ValueError("La IP de gestión no es válida") from exc
+
+    @field_validator("mac_address")
+    @classmethod
+    def validate_mac_address(cls, value: str | None) -> str | None:
+        return DeviceCreate.validate_mac_address(value)
 
 
 class DeviceTypeResponse(BaseModel):
@@ -109,5 +127,34 @@ class DeviceResponse(BaseModel):
     fqdn: str | None
     numero_serie: str | None
     ip_gestion: str | None
+    mac_address: str | None
     ru_inicio: int | None
     estado_operativo: str
+
+
+class SubnetCreate(BaseModel):
+    cidr: str = Field(min_length=3, max_length=43)
+    etiqueta_vlan: int = Field(ge=1, le=4094)
+    nombre_segmento: str = Field(min_length=1, max_length=100)
+    descripcion: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("cidr")
+    @classmethod
+    def validate_cidr(cls, value: str) -> str:
+        try:
+            return str(ipaddress.ip_network(value.strip(), strict=False))
+        except ValueError as exc:
+            raise ValueError("El segmento debe ser una red CIDR válida") from exc
+
+
+class IPReservationCreate(BaseModel):
+    direccion: str = Field(min_length=3, max_length=45)
+    proposito: str | None = Field(default=None, max_length=100)
+
+    @field_validator("direccion")
+    @classmethod
+    def validate_address(cls, value: str) -> str:
+        try:
+            return str(ipaddress.ip_address(value.strip()))
+        except ValueError as exc:
+            raise ValueError("La dirección IP no es válida") from exc

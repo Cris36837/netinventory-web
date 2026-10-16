@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -81,6 +82,7 @@ class BastidorRack(Base):
 
 class Dispositivo(Base):
     __tablename__ = "dispositivos"
+    __table_args__ = (Index("uq_dispositivos_mac_address", "mac_address", unique=True),)
 
     id_dispositivo = Column(Integer, primary_key=True, index=True)
     id_tipo = Column(
@@ -96,13 +98,19 @@ class Dispositivo(Base):
     fqdn = Column(String(253), unique=True)
     numero_serie = Column(String(120), unique=True)
     ip_gestion = Column(String(45), unique=True)
+    mac_address = Column(String(17))
     ru_inicio = Column(Integer)
     estado_operativo = Column(String(30), nullable=False, default="activo")
     tipo = relationship("TipoDispositivo", back_populates="dispositivos")
     rack = relationship("BastidorRack", back_populates="dispositivos")
 
+
 class Subred(Base):
     __tablename__ = "subredes"
+    __table_args__ = (
+        UniqueConstraint("etiqueta_vlan", name="uq_subredes_vlan"),
+        UniqueConstraint("cidr", name="uq_subredes_cidr"),
+    )
 
     id_vlan = Column(Integer, primary_key=True, index=True)
     etiqueta_vlan = Column(Integer, nullable=False)
@@ -113,9 +121,14 @@ class Subred(Base):
 
 class DireccionIP(Base):
     __tablename__ = "direcciones_ip"
+    __table_args__ = (UniqueConstraint("direccion", name="uq_direcciones_ip_direccion"),)
 
     id_ip = Column(Integer, primary_key=True, index=True)
-    id_subred = Column(Integer, ForeignKey("subredes.id_vlan", ondelete="CASCADE"), nullable=False)
+    id_subred = Column(
+        Integer,
+        ForeignKey("subredes.id_vlan", ondelete="CASCADE"),
+        nullable=False,
+    )
     direccion = Column(String(45), nullable=False)
-    estado_asignacion = Column(String(30), nullable=False, default="libre")
+    estado_asignacion = Column(String(30), nullable=False, default="reservada")
     proposito = Column(String(100))

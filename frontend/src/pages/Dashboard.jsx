@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import IpamPanel from '../components/IpamPanel';
+import { formatApiError } from '../utils/errors';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const emptyDevice = {
@@ -9,6 +11,7 @@ const emptyDevice = {
   fqdn: '',
   numero_serie: '',
   ip_gestion: '',
+  mac_address: '',
   ru_inicio: '',
   estado_operativo: 'activo',
 };
@@ -25,7 +28,7 @@ async function apiRequest(path, options = {}) {
   });
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok) {
-    throw new Error(data?.detail || 'No se pudo completar la operación');
+    throw new Error(formatApiError(data?.detail));
   }
   return data;
 }
@@ -38,6 +41,7 @@ function toDevicePayload(form) {
     fqdn: form.fqdn.trim() || null,
     numero_serie: form.numero_serie.trim() || null,
     ip_gestion: form.ip_gestion.trim() || null,
+    mac_address: form.mac_address.trim() || null,
     ru_inicio: form.ru_inicio ? Number(form.ru_inicio) : null,
     estado_operativo: form.estado_operativo,
   };
@@ -97,12 +101,13 @@ export default function Dashboard() {
         if (active) applyDashboardData(data);
       })
       .catch((loadError) => {
-        if (loadError.message.includes('Token') || loadError.message.includes('cuenta')) {
+        const message = formatApiError(loadError);
+        if (message.includes('Token') || message.includes('cuenta')) {
           localStorage.removeItem('netinventory_token');
           navigate('/login', { replace: true });
           return;
         }
-        if (active) setError(loadError.message);
+        if (active) setError(message);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -135,7 +140,7 @@ export default function Dashboard() {
       await loadData();
       setNotice(editingDevice ? 'Activo actualizado.' : 'Activo registrado.');
     } catch (requestError) {
-      setError(requestError.message);
+      setError(formatApiError(requestError));
     }
   };
 
@@ -148,6 +153,7 @@ export default function Dashboard() {
       fqdn: device.fqdn || '',
       numero_serie: device.numero_serie || '',
       ip_gestion: device.ip_gestion || '',
+      mac_address: device.mac_address || '',
       ru_inicio: device.ru_inicio ? String(device.ru_inicio) : '',
       estado_operativo: device.estado_operativo,
     });
@@ -161,7 +167,7 @@ export default function Dashboard() {
       await loadData();
       setNotice('Activo eliminado.');
     } catch (requestError) {
-      setError(requestError.message);
+      setError(formatApiError(requestError));
     }
   };
 
@@ -178,7 +184,7 @@ export default function Dashboard() {
       await loadData();
       setNotice('Usuario creado.');
     } catch (requestError) {
-      setError(requestError.message);
+      setError(formatApiError(requestError));
     }
   };
 
@@ -192,7 +198,7 @@ export default function Dashboard() {
       await loadData();
       setNotice('Usuario actualizado.');
     } catch (requestError) {
-      setError(requestError.message);
+      setError(formatApiError(requestError));
     }
   };
 
@@ -204,7 +210,7 @@ export default function Dashboard() {
     <main className="dashboard-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">NetInventory / Sprint 3</p>
+          <p className="eyebrow">NetInventory / Sprint 4</p>
           <h1>Inventario de red</h1>
           {user ? <p className="muted">Sesión: {user.nombre_usuario} · Rol: {user.rol}</p> : null}
         </div>
@@ -267,6 +273,10 @@ export default function Dashboard() {
               <input value={deviceForm.ip_gestion} onChange={(event) => setDeviceForm({ ...deviceForm, ip_gestion: event.target.value })} placeholder="192.168.1.10" />
             </label>
             <label>
+              Dirección MAC
+              <input value={deviceForm.mac_address} onChange={(event) => setDeviceForm({ ...deviceForm, mac_address: event.target.value })} placeholder="AA:BB:CC:DD:EE:FF" />
+            </label>
+            <label>
               Rack (opcional)
               <select value={deviceForm.id_rack} onChange={(event) => setDeviceForm({ ...deviceForm, id_rack: event.target.value })}>
                 <option value="">Sin rack asignado</option>
@@ -304,7 +314,7 @@ export default function Dashboard() {
             <table>
               <thead>
                 <tr>
-                  <th>Host</th><th>Tipo</th><th>IP de gestión</th><th>Serie</th><th>Estado</th><th>Rack</th>
+                  <th>Host</th><th>Tipo</th><th>IP de gestión</th><th>MAC</th><th>Serie</th><th>Estado</th><th>Rack</th>
                   {user?.rol !== 'Auditor' ? <th>Acciones</th> : null}
                 </tr>
               </thead>
@@ -314,6 +324,7 @@ export default function Dashboard() {
                     <td>{device.nombre_host}{device.fqdn ? <small>{device.fqdn}</small> : null}</td>
                     <td>{device.categoria} · {device.fabricante} {device.modelo}</td>
                     <td>{device.ip_gestion || '—'}</td>
+                    <td>{device.mac_address || '—'}</td>
                     <td>{device.numero_serie || '—'}</td>
                     <td><span className={`status-pill ${device.estado_operativo}`}>{device.estado_operativo}</span></td>
                     <td>{device.id_rack ?? '—'}</td>
@@ -330,6 +341,8 @@ export default function Dashboard() {
           </div>
         ) : <p className="muted">Todavía no hay activos registrados.</p>}
       </section>
+
+      <IpamPanel apiRequest={apiRequest} user={user} />
 
       {user?.rol === 'Admin' ? (
         <section className="panel">
