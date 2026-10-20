@@ -2,7 +2,7 @@
 
 Sistema web para gestión y monitoreo de infraestructura de red. El repositorio contiene una aplicación React/Vite, una API FastAPI y servicios PostgreSQL y Redis ejecutables con Docker Compose.
 
-> El alcance actual incluye autenticación, usuarios/roles, gestión de activos e IPAM. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
+> El alcance actual incluye autenticación, usuarios/roles, gestión de activos, IPAM, diagnóstico manual y monitoreo periódico. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
 
 ## Requisitos
 
@@ -87,6 +87,8 @@ La API aplica permisos en el backend; ocultar controles en la interfaz no se con
 | Crear o editar dispositivos | Sí | Sí | No |
 | Eliminar dispositivos | Sí | No | No |
 | Consultar y administrar usuarios/roles | Sí | No | No |
+| Ejecutar ping o escaneo de puertos | Sí | Sí | No |
+| Consultar estado e historial de monitoreo | Sí | Sí | Sí |
 
 La gestión de cuentas permite crear usuarios, asignar uno de los tres roles y cambiar rol o estado activo. Las cuentas se desactivan, no se borran. La API impide desactivar o quitar el rol al último administrador activo. Las contraseñas se guardan como hashes bcrypt, nunca como texto claro.
 
@@ -119,6 +121,21 @@ El formulario del dashboard permite registrar y editar activos. Admin puede adem
 El dashboard permite crear subredes CIDR sin traslapes, consultar sus direcciones utilizables en páginas, reservar una IP libre y liberar una reserva. Las IP configuradas en activos aparecen como ocupadas; las direcciones de red y broadcast IPv4 no se ofrecen como hosts. Técnicos y Admin pueden gestionar subredes y reservas; Auditor puede consultar la tabla IPAM.
 
 La API expone `GET/POST /api/v1/ipam/subnets`, `GET /api/v1/ipam/subnets/{id}/addresses`, `POST /api/v1/ipam/subnets/{id}/reservations` y `DELETE /api/v1/ipam/reservations/{id_ip}`. El alta y edición de activos valida y normaliza IP y MAC, y rechaza IPs reservadas. Las restricciones únicas en la base de datos impiden repetir las IP y MAC entre activos, así como repetir una IP reservada.
+
+## Sprint 5: diagnóstico manual y monitoreo
+
+El dashboard incluye un menú lateral que organiza el resumen, activos, IPAM, diagnóstico y administración de usuarios según el rol autenticado. Admin y Técnico pueden probar conectividad ICMP y ejecutar escaneos manuales TCP/UDP contra dispositivos registrados con IP de gestión. Cada solicitud admite hasta 100 puertos únicos; UDP puede reportarse como `open|filtered` cuando no hay respuesta, porque un datagrama sin respuesta no permite afirmar que el puerto esté cerrado.
+
+Un worker asíncrono inicia con la API y sondea por ICMP los dispositivos operativos que tienen IP de gestión. El intervalo predeterminado es de 60 segundos y puede ajustarse con `MONITORING_INTERVAL_SECONDS` (mínimo 15 segundos). Los resultados manuales y automáticos quedan en `resultados_sondeo`; las tablas faltantes se crean al iniciar, incluso si se conserva un volumen PostgreSQL.
+
+| Método | Ruta | Permiso | Uso |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/devices/{device_id}/diagnostics/ping` | Admin o Técnico | Ejecuta y guarda un ping ICMP manual |
+| `POST` | `/api/v1/devices/{device_id}/diagnostics/ports` | Admin o Técnico | Escanea hasta 100 puertos TCP o UDP del activo |
+| `GET` | `/api/v1/monitoring/status` | Usuario autenticado | Consulta el último sondeo automático por activo |
+| `GET` | `/api/v1/monitoring/results?limit=20` | Usuario autenticado | Consulta el historial reciente (máximo 100) |
+
+El worker requiere que el ejecutor `ping` esté disponible. La imagen Docker instala `iputils-ping`; en ejecución local debe estar instalado en el sistema operativo. Los endpoints manuales solo aceptan el identificador de un activo existente, no una IP arbitraria. Auditor puede consultar estado e historial, pero no iniciar pruebas.
 
 ### Inicialización de la base de datos
 

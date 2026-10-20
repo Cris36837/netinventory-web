@@ -7,16 +7,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers.auth import router as auth_router
 from .routers.devices import router as devices_router
 from .routers.ipam import router as ipam_router
+from .routers.monitoring import router as monitoring_router
 from .routers.users import router as users_router
-from .routers.ipam import router as ipam_router
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    import asyncio
+
     from .bootstrap import initialize_database
 
     await initialize_database()
-    yield
+    from .monitoring import monitor_devices
+
+    monitor_task = asyncio.create_task(monitor_devices())
+    try:
+        yield
+    finally:
+        monitor_task.cancel()
+        try:
+            await monitor_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="NetInventory API", version="1.0.0", lifespan=lifespan)
@@ -42,6 +54,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(devices_router)
 app.include_router(ipam_router)
+app.include_router(monitoring_router)
 
 
 @app.get("/health")

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import IpamPanel from '../components/IpamPanel';
+import MonitoringPanel from '../components/MonitoringPanel';
 import { formatApiError } from '../utils/errors';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -79,6 +80,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState('overview');
 
   const applyDashboardData = (data) => {
     setUser(data.currentUser);
@@ -207,20 +209,62 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="dashboard-shell">
+    <main className="app-shell">
+      <aside className="sidebar">
+        <button
+          className="sidebar-brand"
+          type="button"
+          onClick={() => setActiveSection('overview')}
+        >
+          <span className="brand-mark">NI</span>
+          <span>NetInventory<small>Operaciones de red</small></span>
+        </button>
+        <p className="sidebar-label">ESPACIO DE TRABAJO</p>
+        <nav className="sidebar-nav" aria-label="Navegación principal">
+          {[
+            { id: 'overview', label: 'Resumen', icon: '◫' },
+            { id: 'devices', label: 'Activos de red', icon: '▦' },
+            { id: 'ipam', label: 'Direcciones IP', icon: '⌘' },
+            { id: 'monitoring', label: 'Diagnóstico y monitoreo', icon: '⌁' },
+            ...(user?.rol === 'Admin' ? [{ id: 'users', label: 'Usuarios', icon: '♙' }] : []),
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-link ${activeSection === item.id ? 'active' : ''}`}
+              onClick={() => { setActiveSection(item.id); setError(''); setNotice(''); }}
+              aria-current={activeSection === item.id ? 'page' : undefined}
+            >
+              <span className="sidebar-icon" aria-hidden="true">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-account">
+          <span className="account-avatar">{user?.nombre_usuario?.slice(0, 1).toUpperCase() || 'U'}</span>
+          <span className="account-name">{user?.nombre_usuario}<small>{user?.rol}</small></span>
+          <button type="button" className="sidebar-logout" onClick={handleLogout} aria-label="Cerrar sesión">↗</button>
+        </div>
+      </aside>
+      <div className="dashboard-content">
       <header className="topbar">
         <div>
-          <p className="eyebrow">NetInventory / Sprint 4</p>
-          <h1>Inventario de red</h1>
-          {user ? <p className="muted">Sesión: {user.nombre_usuario} · Rol: {user.rol}</p> : null}
+          <p className="eyebrow">NetInventory / Sprint 5</p>
+          <h1>{{
+            overview: 'Resumen de infraestructura',
+            devices: 'Activos de red',
+            ipam: 'Gestión de direcciones IP',
+            monitoring: 'Diagnóstico y monitoreo',
+            users: 'Administración de usuarios',
+          }[activeSection]}</h1>
         </div>
-        <button className="secondary-button" onClick={handleLogout}>Cerrar sesión</button>
+        <span className="live-indicator"><span />Sistema operativo</span>
       </header>
 
       {error ? <div className="error-box page-message">{error}</div> : null}
       {notice ? <div className="success-box page-message">{notice}</div> : null}
 
-      <section className="stats-grid">
+      {activeSection === 'overview' ? <section className="stats-grid">
         <article className="stat-card blue">
           <span>Activos registrados</span>
           <strong>{devices.length}</strong>
@@ -235,9 +279,17 @@ export default function Dashboard() {
             <strong>{users.length}</strong>
           </article>
         ) : null}
-      </section>
+        <article className="stat-card amber">
+          <span>Activos con IP de gestión</span>
+          <strong>{devices.filter((device) => device.ip_gestion).length}</strong>
+        </article>
+        <article className="stat-card cyan">
+          <span>Activos operativos</span>
+          <strong>{devices.filter((device) => device.estado_operativo === 'activo').length}</strong>
+        </article>
+      </section> : null}
 
-      {user?.rol !== 'Auditor' ? (
+      {activeSection === 'devices' && user?.rol !== 'Auditor' ? (
         <section className="panel">
           <h2>{editingDevice ? 'Editar activo' : 'Registrar activo de red'}</h2>
           <form className="data-form" onSubmit={handleDeviceSubmit}>
@@ -307,7 +359,7 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      <section className="panel">
+      {activeSection === 'devices' || activeSection === 'overview' ? <section className="panel">
         <h2>Activos registrados</h2>
         {devices.length ? (
           <div className="table-wrap">
@@ -340,11 +392,14 @@ export default function Dashboard() {
             </table>
           </div>
         ) : <p className="muted">Todavía no hay activos registrados.</p>}
-      </section>
+      </section> : null}
 
-      <IpamPanel apiRequest={apiRequest} user={user} />
+      {activeSection === 'ipam' ? <IpamPanel apiRequest={apiRequest} user={user} /> : null}
+      {activeSection === 'monitoring' ? (
+        <MonitoringPanel apiRequest={apiRequest} devices={devices} user={user} />
+      ) : null}
 
-      {user?.rol === 'Admin' ? (
+      {activeSection === 'users' && user?.rol === 'Admin' ? (
         <section className="panel">
           <h2>Administrar usuarios</h2>
           <form className="data-form user-form" onSubmit={createUser}>
@@ -384,6 +439,7 @@ export default function Dashboard() {
           </div>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

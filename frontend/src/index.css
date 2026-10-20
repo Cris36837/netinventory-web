@@ -295,6 +295,221 @@ td small {
   padding: 32px 20px 48px;
 }
 
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 258px minmax(0, 1fr);
+  background: #070d1a;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 25px 16px 18px;
+  background: rgba(8, 15, 29, 0.96);
+  border-right: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 9px 31px;
+  color: #f8fafc;
+  text-decoration: none;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-brand small,
+.account-name small {
+  display: block;
+  margin-top: 3px;
+  color: #8291a8;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #2563eb, #38bdf8);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.sidebar-label {
+  margin: 0 10px 11px;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 5px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #a8b5c9;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.sidebar-link:hover,
+.sidebar-link.active {
+  background: rgba(59, 130, 246, 0.13);
+  color: #dbeafe;
+}
+
+.sidebar-link.active {
+  border-color: rgba(96, 165, 250, 0.15);
+}
+
+.sidebar-icon {
+  width: 20px;
+  color: #7da9ee;
+  font-size: 1.08rem;
+  text-align: center;
+}
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 15px 5px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.account-avatar {
+  display: grid;
+  flex: 0 0 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+  font-weight: 700;
+}
+
+.account-name {
+  overflow: hidden;
+  flex: 1;
+  color: #e2e8f0;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-logout {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.dashboard-content {
+  min-width: 0;
+  width: min(100%, 1500px);
+  margin: 0 auto;
+  padding: 35px clamp(20px, 4vw, 56px) 52px;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: 999px;
+  color: #a7f3d0;
+  font-size: 0.78rem;
+}
+
+.live-indicator span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 9px rgba(52, 211, 153, 0.75);
+}
+
+.stat-card.cyan { border-color: rgba(34, 211, 238, 0.45); }
+
+.monitoring-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.monitoring-field {
+  display: grid;
+  gap: 7px;
+  max-width: 520px;
+  color: #dbeafe;
+  font-weight: 600;
+}
+
+.monitoring-field select,
+.monitoring-scan-form select,
+.monitoring-scan-form input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: #0f172a;
+  padding: 10px 12px;
+  color: #f8fafc;
+}
+
+.monitoring-actions {
+  margin: 14px 0 20px;
+}
+
+.monitoring-scan-form {
+  margin-bottom: 0;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.panel-heading h2 {
+  margin-bottom: 5px;
+}
+
+.panel-heading .muted {
+  margin-top: 0;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -414,7 +629,55 @@ td small {
 .muted {
   color: #cbd5e1;
 }
+
 @media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 12px 14px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  }
+
+  .sidebar-brand {
+    padding: 3px 4px 12px;
+  }
+
+  .sidebar-label {
+    display: none;
+  }
+
+  .sidebar-account {
+    margin-top: 10px;
+    padding-top: 9px;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+  }
+
+  .sidebar-link {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 9px 10px;
+    font-size: 0.82rem;
+  }
+
+  .sidebar-icon {
+    width: auto;
+  }
+
+  .dashboard-content {
+    padding: 24px 16px 40px;
+  }
+
   .panel-grid {
     grid-template-columns: 1fr;
   }
@@ -422,5 +685,9 @@ td small {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .panel-heading {
+    flex-direction: column;
   }
 }

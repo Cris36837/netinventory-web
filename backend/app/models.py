@@ -5,6 +5,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     UniqueConstraint,
     func,
@@ -132,3 +133,21 @@ class DireccionIP(Base):
     direccion = Column(String(45), nullable=False)
     estado_asignacion = Column(String(30), nullable=False, default="reservada")
     proposito = Column(String(100))
+
+
+class ResultadoSondeo(Base):
+    __tablename__ = "resultados_sondeo"
+
+    id_resultado = Column(Integer, primary_key=True, index=True)
+    id_dispositivo = Column(
+        Integer,
+        ForeignKey("dispositivos.id_dispositivo", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    origen = Column(String(20), nullable=False)
+    tipo = Column(String(20), nullable=False)
+    estado = Column(String(30), nullable=False)
+    latencia_ms = Column(Integer)
+    detalle = Column(JSON, nullable=False, default=dict)
+    fecha_sondeo = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

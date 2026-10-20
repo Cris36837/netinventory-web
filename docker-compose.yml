@@ -40,6 +40,7 @@ services:
       JWT_SECRET_KEY: netinventory-local-development-key-change-before-deployment-2026
       JWT_ALGORITHM: HS256
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      MONITORING_INTERVAL_SECONDS: ${MONITORING_INTERVAL_SECONDS:-60}
     ports:
       - "8000:8000"
     volumes:
