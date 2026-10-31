@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import IpamPanel from '../components/IpamPanel';
 import MonitoringPanel from '../components/MonitoringPanel';
 import { formatApiError } from '../utils/errors';
+import TopologyMap from '../TopologyMap';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const emptyDevice = {
@@ -226,6 +227,7 @@ export default function Dashboard() {
             { id: 'devices', label: 'Activos de red', icon: '▦' },
             { id: 'ipam', label: 'Direcciones IP', icon: '⌘' },
             { id: 'monitoring', label: 'Diagnóstico y monitoreo', icon: '⌁' },
+            { id: 'topology', label: 'Topología de red', icon: '🗺️' },
             ...(user?.rol === 'Admin' ? [{ id: 'users', label: 'Usuarios', icon: '♙' }] : []),
           ].map((item) => (
             <button
@@ -255,6 +257,7 @@ export default function Dashboard() {
             devices: 'Activos de red',
             ipam: 'Gestión de direcciones IP',
             monitoring: 'Diagnóstico y monitoreo',
+            topology: 'Topología lógica de red',
             users: 'Administración de usuarios',
           }[activeSection]}</h1>
         </div>
@@ -397,6 +400,14 @@ export default function Dashboard() {
       {activeSection === 'ipam' ? <IpamPanel apiRequest={apiRequest} user={user} /> : null}
       {activeSection === 'monitoring' ? (
         <MonitoringPanel apiRequest={apiRequest} devices={devices} user={user} />
+      ) : null}
+      
+      {activeSection === 'topology' ? (
+        <section className="panel">
+          <div className="h-[600px] w-full border border-slate-700 rounded-lg overflow-hidden bg-slate-900">
+            <TopologyMap />
+          </div>
+        </section>
       ) : null}
 
       {activeSection === 'users' && user?.rol === 'Admin' ? (

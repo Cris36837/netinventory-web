@@ -168,3 +168,44 @@ async def monitoring_results(
         .limit(limit)
     )
     return [serialize_result(probe, device) for probe, device in result.all()]
+
+
+@router.get("/devices/{device_id}/history")
+async def get_device_monitoring_history(
+    device_id: int,
+    _: Annotated[Usuario, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=30, ge=1, le=200),
+):
+    """
+    Obtiene el historial de latencia y disponibilidad de un activo específico
+    para alimentar las gráficas de rendimiento del Sprint 6 (HU-11).
+    """
+    device = await get_target(db, device_id)
+
+    query = (
+        select(ResultadoSondeo)
+        .where(ResultadoSondeo.id_dispositivo == device_id)
+        .order_by(ResultadoSondeo.fecha_sondeo.desc())
+        .limit(limit)
+    )
+    history_result = await db.execute(query)
+    logs = history_result.scalars().all()
+
+    # Invertir para orden cronológico ascendente en la gráfica
+    logs.reverse()
+
+    return {
+        "id_dispositivo": device_id,
+        "nombre_host": device.nombre_host,
+        "history": [
+            {
+                "fecha_sondeo": log.fecha_sondeo.strftime("%Y-%m-%d %H:%M:%S") if log.fecha_sondeo else None,
+                "latencia_ms": log.latencia_ms,
+                "estado": log.estado,
+                "tipo": log.tipo,
+                "origen": log.origen,
+            }
+            for log in logs
+        ],
+    }
