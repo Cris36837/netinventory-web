@@ -5,7 +5,6 @@ import MonitoringPanel from '../components/MonitoringPanel';
 import { formatApiError } from '../utils/errors';
 import TopologyMap from '../TopologyMap';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const emptyDevice = {
   id_tipo: '',
   id_rack: '',
@@ -20,7 +19,7 @@ const emptyDevice = {
 
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem('netinventory_token');
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(path, {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),

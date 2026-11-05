@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatApiError } from '../utils/errors';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
 export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ correo: 'admin@netinventory.com', password: 'admin123' });
@@ -21,7 +19,7 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

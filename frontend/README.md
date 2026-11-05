@@ -10,8 +10,6 @@ npm run dev -- --host 0.0.0.0 --port 5173
 npm run build
 ```
 
-## Variables de entorno
+## Proxy de la API
 
-```env
-VITE_API_URL=http://localhost:8000
-```
+Las peticiones usan rutas relativas (`/api/...`) para que el navegador se conecte al mismo origen del frontend. Vite las reenvía al backend. El destino predeterminado para desarrollo local es `http://localhost:8000`; define `API_PROXY_TARGET` para cambiarlo. Docker Compose usa `http://backend:8000`, que es el nombre del servicio dentro de la red de Docker.

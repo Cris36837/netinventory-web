@@ -7,36 +7,100 @@ Sistema web para gestión y monitoreo de infraestructura de red. El repositorio 
 ## Requisitos
 
 - Docker Desktop (Windows/macOS) o Docker Engine y Docker Compose.
+- En Windows, inicia Docker Desktop antes de ejecutar los comandos. Docker Desktop debe estar usando contenedores Linux (la opción predeterminada).
 - Para desarrollo sin Docker: Python 3.12 o superior y Node.js 20 o superior.
+
+## Llevar el proyecto a otro equipo
+
+En el equipo de destino, instala y abre Docker Desktop (Windows/macOS) o instala Docker Engine y el complemento Docker Compose (Linux). No es necesario instalar Python, Node.js, PostgreSQL ni Redis para ejecutar el proyecto con Docker.
+
+Clona el repositorio y entra a la carpeta que contiene `docker-compose.yml`:
+
+```powershell
+git clone https://github.com/Cris36837/netinventory-web.git
+Set-Location netinventory-web
+```
+
+También se puede descargar el ZIP desde GitHub y extraerlo; en ese caso, abre una terminal en la carpeta extraída que contiene `docker-compose.yml`. La base de datos y los datos creados en otro equipo no vienen incluidos al clonar o descargar el código: cada instalación crea y conserva su propio volumen local de PostgreSQL.
 
 ## Inicio con Docker
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio, construye las imágenes e inicia los servicios en segundo plano:
 
-```bash
-docker compose up --build
+```powershell
+docker compose up --build -d
+docker compose ps
 ```
 
-Cuando los servicios estén listos, abre:
+Espera a que PostgreSQL y el backend aparezcan como `healthy` en `docker compose ps`. Después abre la aplicación:
 
 | Servicio | URL/puerto |
 | --- | --- |
 | Frontend | http://localhost:5173 |
-| API y documentación OpenAPI | http://localhost:8000/docs |
-| Salud de la API | http://localhost:8000/health |
-| PostgreSQL | localhost:5432 |
-| Redis | localhost:6379 |
+| API y documentación OpenAPI (opcional) | http://localhost:8000/docs |
+| Salud de la API (opcional) | http://localhost:8000/health |
 
-El frontend y el backend montan el código local como volumen para facilitar el desarrollo. Para ejecutar los contenedores en segundo plano, añade `-d`:
+La salida de `docker compose ps` permite verificar que los contenedores están activos. Para ver los registros del backend mientras funciona:
 
-```bash
-docker compose up --build -d
-docker compose ps
+```powershell
 docker compose logs -f backend
+```
+
+Pulsa `Ctrl+C` para dejar de ver los registros; esto no detiene los servicios. Para detenerlos:
+
+```powershell
 docker compose down
 ```
 
-`docker compose down` detiene y elimina los contenedores, pero conserva los datos de PostgreSQL en el volumen `postgres_data`. **No uses `docker compose down -v` salvo que quieras borrar también permanentemente los datos de desarrollo de la base de datos.** El SQL de `database/init.sql` solo se ejecuta al crear por primera vez el volumen de PostgreSQL.
+Para iniciarlos de nuevo sin reconstruir:
+
+```powershell
+docker compose up -d
+```
+
+### Abrir la aplicación desde otro equipo o una máquina virtual
+
+Si el navegador está dentro del mismo equipo que ejecuta Docker, usa `http://localhost:5173`. Si está en otro equipo, averigua la dirección IP del equipo que ejecuta Docker y abre `http://<IP-del-equipo-con-Docker>:5173`. En Windows, la IP se puede consultar con `ipconfig`.
+
+Para acceder desde otro equipo:
+
+1. Asegúrate de que ambos equipos puedan comunicarse por la red.
+2. Permite conexiones entrantes al puerto TCP `5173` en el firewall del equipo con Docker.
+3. Si Docker se ejecuta dentro de una máquina virtual, configura su adaptador de red en modo puente o crea una regla de reenvío de puertos desde el equipo anfitrión al puerto `5173` de la VM. La configuración depende del programa de virtualización.
+4. Abre `http://<IP-de-la-VM>:5173` desde el navegador del otro equipo. Si usaste reenvío de puertos, utiliza la dirección y el puerto configurados en el anfitrión.
+
+El navegador usa el frontend como origen y este reenvía `/api` al backend por la red interna de Docker. Por eso no hay que poner la IP de la VM en el código ni configurar CORS para cada equipo. `localhost` siempre significa “este mismo equipo” desde la perspectiva del navegador. El puerto `8000` solo se necesita si se quiere abrir directamente la documentación de la API; no es necesario para usar la aplicación. No expongas PostgreSQL ni Redis a redes públicas.
+
+Si un puerto publicado ya está ocupado, cambia el puerto en el equipo que ejecuta Docker. Por ejemplo, para usar `8080` en lugar de `5173`:
+
+```powershell
+$env:FRONTEND_PORT = "8080"
+docker compose up --build -d
+```
+
+En ese caso, abre `http://localhost:8080` o `http://<IP-del-equipo-con-Docker>:8080`. También se pueden cambiar los puertos publicados con las variables `BACKEND_PORT`, `POSTGRES_PORT` y `REDIS_PORT`. Estas variables deben definirse en la misma terminal antes de ejecutar Compose.
+
+`docker compose down` detiene y elimina los contenedores, pero conserva los datos de PostgreSQL en el volumen `postgres_data`. **No uses `docker compose down -v` salvo que quieras borrar permanentemente los datos locales de la base de datos.** El SQL de `database/init.sql` solo se ejecuta al crear por primera vez el volumen de PostgreSQL.
+
+### Uso inicial y solución de problemas
+
+La base inicial incluye una cuenta de desarrollo:
+
+- Correo: `admin@netinventory.com`
+- Contraseña: `admin123`
+
+Inicia sesión con esas credenciales y cambia la contraseña antes de cualquier uso fuera de una demostración local. Admin puede gestionar usuarios y activos; Técnico puede gestionar activos y ejecutar diagnósticos; Auditor tiene acceso de consulta. Los cambios de datos se guardan en la base de datos local del equipo.
+
+Si la página de login abre pero el dashboard no carga, comprueba los servicios y consulta los registros:
+
+```powershell
+docker compose ps
+docker compose logs --tail=100 backend
+docker compose logs --tail=100 frontend
+docker compose logs --tail=100 postgres
+```
+
+También puedes comprobar la API desde el equipo con Docker abriendo `http://localhost:8000/health`. Si no responde, revisa que el backend esté `healthy` y los registros de `backend` y `postgres`. Si la aplicación abre localmente pero no desde otro equipo, revisa la IP, la conectividad entre equipos, el firewall y la configuración de red o reenvío de puertos de la VM. Si el puerto `5173` ya está en uso, prueba con `FRONTEND_PORT` como se describe arriba.
 
 ## Inicio de sesión y autenticación
 
@@ -153,7 +217,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 
 ### Configuración y seguridad
 
-En Docker Compose, `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM` y `CORS_ORIGINS` configuran la conexión a PostgreSQL, la firma de tokens, el algoritmo y los orígenes permitidos, respectivamente. `VITE_API_URL` configura la URL de la API utilizada por el frontend.
+En Docker Compose, `DATABASE_URL`, `JWT_SECRET_KEY` y `JWT_ALGORITHM` configuran la conexión a PostgreSQL y la firma de tokens. `API_PROXY_TARGET` apunta el proxy de desarrollo del frontend al servicio backend en la red interna de Docker; en ejecución local de Vite, el valor predeterminado es `http://localhost:8000`.
 
 Las credenciales y la clave JWT incluidas en `docker-compose.yml` son exclusivamente valores locales de desarrollo. El backend no inicia si `JWT_SECRET_KEY` no está configurada con al menos 32 bytes. Antes de desplegar en un entorno real, genera una clave aleatoria y privada, configúrala como secreto de entorno, no publiques credenciales y sirve la aplicación mediante HTTPS. La cuenta inicial también usa una contraseña conocida: cámbiala antes de cualquier uso fuera del entorno local.
 
@@ -182,9 +246,10 @@ Frontend:
 ```powershell
 cd frontend
 npm install
-$env:VITE_API_URL = "http://localhost:8000"
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
+
+Las llamadas a la API usan rutas relativas (`/api/...`). El proxy de Vite las reenvía a `http://localhost:8000` por defecto en desarrollo local; puedes cambiar el destino definiendo `API_PROXY_TARGET`.
 
 ## Compilar y revisar el frontend
 

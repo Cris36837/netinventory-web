@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -9,7 +9,7 @@ const TopologyMap = () => {
 
   useEffect(() => {
     // Consultamos el estado de los dispositivos para mapearlos como nodos
-    fetch('http://localhost:8000/api/v1/monitoring/status', {
+    fetch('/api/v1/monitoring/status', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }

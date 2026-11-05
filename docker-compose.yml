@@ -1,14 +1,13 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: netinventory_db
     restart: always
     environment:
       POSTGRES_DB: netinventory_db
       POSTGRES_USER: netuser
       POSTGRES_PASSWORD: netpassword123
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -20,16 +19,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: netinventory_redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: netinventory_backend
     depends_on:
         postgres:
           condition: service_healthy
@@ -39,10 +36,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://netuser:netpassword123@postgres:5432/netinventory_db
       JWT_SECRET_KEY: netinventory-local-development-key-change-before-deployment-2026
       JWT_ALGORITHM: HS256
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       MONITORING_INTERVAL_SECONDS: ${MONITORING_INTERVAL_SECONDS:-60}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
     healthcheck:
@@ -56,14 +52,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: netinventory_frontend
     depends_on:
       backend:
         condition: service_healthy
     environment:
-      VITE_API_URL: http://localhost:8000
+      API_PROXY_TARGET: http://backend:8000
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
