@@ -9,6 +9,7 @@ from .routers.devices import router as devices_router
 from .routers.ipam import router as ipam_router
 from .routers.monitoring import router as monitoring_router
 from .routers.users import router as users_router
+from .routers.audit import router as audit_router
 
 
 @asynccontextmanager
@@ -55,6 +56,7 @@ app.include_router(users_router)
 app.include_router(devices_router)
 app.include_router(ipam_router)
 app.include_router(monitoring_router)
+app.include_router(audit_router)
 
 
 @app.get("/health")

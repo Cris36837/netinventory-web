@@ -7,6 +7,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -151,3 +152,19 @@ class ResultadoSondeo(Base):
     latencia_ms = Column(Integer)
     detalle = Column(JSON, nullable=False, default=dict)
     fecha_sondeo = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id_auditoria = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id_usuario", ondelete="SET NULL"),
+        nullable=True,
+    )
+    accion = Column(String(100), nullable=False)
+    detalles = Column(Text, nullable=True)
+    ip_origen = Column(String(45), nullable=True)
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    usuario = relationship("Usuario")

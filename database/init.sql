@@ -103,3 +103,26 @@ CREATE TABLE IF NOT EXISTS direcciones_ip (
     estado_asignacion VARCHAR(30) NOT NULL DEFAULT 'reservada',
     proposito VARCHAR(100)
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id_auditoria SERIAL PRIMARY KEY,
+    id_usuario UUID REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
+    accion VARCHAR(100) NOT NULL,
+    detalles TEXT,
+    ip_origen VARCHAR(45),
+    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- REGLA DE INMUTABILIDAD: Bloquear actualizaciones y borrados a nivel de base de datos
+CREATE OR REPLACE FUNCTION prevent_audit_modification()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Los registros de auditoría son inmutables y no se pueden modificar ni eliminar.';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_audit_tampering ON audit_logs;
+CREATE TRIGGER trg_prevent_audit_tampering
+BEFORE UPDATE OR DELETE ON audit_logs
+FOR EACH ROW
+EXECUTE FUNCTION prevent_audit_modification();

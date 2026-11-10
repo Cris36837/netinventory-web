@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import IpamPanel from '../components/IpamPanel';
 import MonitoringPanel from '../components/MonitoringPanel';
+import RackElevationPanel from '../components/RackElevationPanel';
 import { formatApiError } from '../utils/errors';
 import TopologyMap from '../TopologyMap';
 
@@ -227,6 +228,7 @@ export default function Dashboard() {
             { id: 'ipam', label: 'Direcciones IP', icon: '⌘' },
             { id: 'monitoring', label: 'Diagnóstico y monitoreo', icon: '⌁' },
             { id: 'topology', label: 'Topología de red', icon: '🗺️' },
+            { id: 'racks', label: 'Elevación de Racks', icon: '🗄️' },
             ...(user?.rol === 'Admin' ? [{ id: 'users', label: 'Usuarios', icon: '♙' }] : []),
           ].map((item) => (
             <button
@@ -257,6 +259,7 @@ export default function Dashboard() {
             ipam: 'Gestión de direcciones IP',
             monitoring: 'Diagnóstico y monitoreo',
             topology: 'Topología lógica de red',
+            racks: 'Elevación física de racks y ocupación',
             users: 'Administración de usuarios',
           }[activeSection]}</h1>
         </div>
@@ -400,6 +403,7 @@ export default function Dashboard() {
       {activeSection === 'monitoring' ? (
         <MonitoringPanel apiRequest={apiRequest} devices={devices} user={user} />
       ) : null}
+      {activeSection === 'racks' ? <RackElevationPanel apiRequest={apiRequest} racks={racks} devices={devices} user={user} /> : null}
       
       {activeSection === 'topology' ? (
         <section className="panel">
