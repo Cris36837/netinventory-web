@@ -30,6 +30,10 @@ button, input, select {
   font: inherit;
 }
 
+textarea {
+  font: inherit;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -171,6 +175,105 @@ table select {
   overflow-x: auto;
 }
 
+.list-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.list-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(100%, 390px);
+  min-height: 42px;
+  padding: 0 10px 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: #0f172a;
+  color: #93c5fd;
+}
+
+.list-search:focus-within {
+  border-color: rgba(96, 165, 250, 0.75);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.list-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f8fafc;
+}
+
+.list-search input::placeholder {
+  color: #8291a8;
+}
+
+.search-clear {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.search-submit {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: rgba(37, 99, 235, 0.75);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.list-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+}
+
+.page-size-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.page-size-select select {
+  min-width: 62px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.list-pagination .secondary-button {
+  padding: 7px 10px;
+}
+
+.list-count {
+  min-width: 82px;
+  text-align: center;
+}
+
+.list-page-number {
+  min-width: 48px;
+  text-align: center;
+  color: #94a3b8;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -243,7 +346,8 @@ td small {
   font-weight: 600;
 }
 
-.ipam-subnet-select select {
+.ipam-subnet-select select,
+.ipam-subnet-select input {
   min-width: 0;
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -474,6 +578,7 @@ td small {
 }
 
 .monitoring-field select,
+.monitoring-field input,
 .monitoring-scan-form select,
 .monitoring-scan-form input {
   min-width: 0;
@@ -483,6 +588,103 @@ td small {
   background: #0f172a;
   padding: 10px 12px;
   color: #f8fafc;
+}
+
+.sandbox-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.sandbox-template-actions > form {
+  display: grid;
+  gap: 12px;
+}
+
+.sandbox-template-actions select,
+.file-upload input,
+.sandbox-json-field textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: #0f172a;
+  padding: 10px 12px;
+  color: #f8fafc;
+}
+
+.file-upload {
+  display: grid;
+  align-content: end;
+  gap: 7px;
+  color: #dbeafe;
+  font-weight: 600;
+}
+
+.file-upload input {
+  padding: 7px;
+}
+
+.sandbox-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 999px;
+  background: rgba(6, 95, 70, 0.2);
+  color: #a7f3d0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.sandbox-config-preview {
+  margin-top: 16px;
+  color: #bfdbfe;
+}
+
+.sandbox-config-preview summary {
+  cursor: pointer;
+}
+
+.sandbox-config-preview pre {
+  overflow: auto;
+  max-height: 260px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(2, 8, 23, 0.75);
+  color: #cbd5e1;
+}
+
+.sandbox-json-field {
+  grid-column: 1 / -1;
+}
+
+.sandbox-json-field textarea {
+  min-height: 150px;
+  resize: vertical;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.sandbox-checks {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.sandbox-check {
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.sandbox-check.ok { color: #a7f3d0; }
+.sandbox-check.warning { color: #fde68a; }
+.sandbox-check.error { color: #fecaca; }
+
+.audit-filters {
+  margin-top: 20px;
 }
 
 .monitoring-actions {
@@ -689,5 +891,9 @@ td small {
 
   .panel-heading {
     flex-direction: column;
+  }
+
+  .list-pagination {
+    justify-content: flex-start;
   }
 }

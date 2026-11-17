@@ -1,8 +1,9 @@
 import ipaddress
 import re
+import json
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, JsonValue, field_validator
 
 
 DeviceState = Literal["activo", "mantenimiento", "inactivo"]
@@ -158,3 +159,72 @@ class IPReservationCreate(BaseModel):
             return str(ipaddress.ip_address(value.strip()))
         except ValueError as exc:
             raise ValueError("La dirección IP no es válida") from exc
+
+
+SandboxConfig = dict[str, JsonValue]
+
+
+def validate_sandbox_config(value: SandboxConfig) -> SandboxConfig:
+    if not value:
+        raise ValueError("La configuración debe contener al menos un parámetro")
+    if len(value) > 100:
+        raise ValueError("La configuración no puede superar 100 parámetros")
+    if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")) > 32768:
+        raise ValueError("La configuración no puede superar 32 KB")
+    return value
+
+
+class SandboxTemplateCreate(BaseModel):
+    nombre: str = Field(min_length=2, max_length=120)
+    descripcion: str | None = Field(default=None, max_length=500)
+    fabricante: str | None = Field(default=None, max_length=100)
+    configuracion: SandboxConfig
+
+    @field_validator("nombre")
+    @classmethod
+    def normalize_template_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("El nombre de la plantilla debe tener al menos 2 caracteres")
+        return normalized
+
+    @field_validator("configuracion")
+    @classmethod
+    def validate_config(cls, value: SandboxConfig) -> SandboxConfig:
+        return validate_sandbox_config(value)
+
+
+class SandboxSimulationCreate(BaseModel):
+    tipo_objetivo: Literal["container", "virtual_appliance"]
+    nombre_objetivo: str = Field(min_length=1, max_length=120)
+    id_plantilla: int | None = Field(default=None, ge=1)
+    configuracion_base: SandboxConfig | None = None
+    cambios: SandboxConfig
+
+    @field_validator("nombre_objetivo")
+    @classmethod
+    def normalize_target_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("El nombre del objetivo no puede estar vacío")
+        return normalized
+
+    @field_validator("configuracion_base", "cambios")
+    @classmethod
+    def validate_config(cls, value: SandboxConfig | None) -> SandboxConfig | None:
+        return validate_sandbox_config(value) if value is not None else None
+
+
+class SandboxTemplateGenerate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=2, max_length=120)
+    id_dispositivo: int | None = Field(default=None, ge=1)
+
+    @field_validator("nombre")
+    @classmethod
+    def normalize_template_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("El nombre de la plantilla debe tener al menos 2 caracteres")
+        return normalized

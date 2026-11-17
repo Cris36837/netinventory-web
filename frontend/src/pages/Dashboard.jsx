@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import IpamPanel from '../components/IpamPanel';
 import MonitoringPanel from '../components/MonitoringPanel';
 import RackElevationPanel from '../components/RackElevationPanel';
+import AuditPanel from '../components/AuditPanel';
+import SandboxPanel from '../components/SandboxPanel';
+import ListControls from '../components/ListControls';
 import { formatApiError } from '../utils/errors';
+import useSearchPagination from '../utils/useSearchPagination';
 import TopologyMap from '../TopologyMap';
 
 const emptyDevice = {
@@ -82,6 +86,8 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('overview');
+  const deviceList = useSearchPagination(devices);
+  const userList = useSearchPagination(users);
 
   const applyDashboardData = (data) => {
     setUser(data.currentUser);
@@ -229,6 +235,8 @@ export default function Dashboard() {
             { id: 'monitoring', label: 'Diagnóstico y monitoreo', icon: '⌁' },
             { id: 'topology', label: 'Topología de red', icon: '🗺️' },
             { id: 'racks', label: 'Elevación de Racks', icon: '🗄️' },
+            { id: 'sandbox', label: 'Sandbox de configuración', icon: '⚗️' },
+            ...(user?.rol === 'Admin' || user?.rol === 'Auditor' ? [{ id: 'audit', label: 'Bitácora de auditoría', icon: '▤' }] : []),
             ...(user?.rol === 'Admin' ? [{ id: 'users', label: 'Usuarios', icon: '♙' }] : []),
           ].map((item) => (
             <button
@@ -252,7 +260,7 @@ export default function Dashboard() {
       <div className="dashboard-content">
       <header className="topbar">
         <div>
-          <p className="eyebrow">NetInventory / Sprint 5</p>
+          <p className="eyebrow">NetInventory / Sprint 9</p>
           <h1>{{
             overview: 'Resumen de infraestructura',
             devices: 'Activos de red',
@@ -260,6 +268,8 @@ export default function Dashboard() {
             monitoring: 'Diagnóstico y monitoreo',
             topology: 'Topología lógica de red',
             racks: 'Elevación física de racks y ocupación',
+            sandbox: 'Entorno de simulación de configuración',
+            audit: 'Reportes de auditoría',
             users: 'Administración de usuarios',
           }[activeSection]}</h1>
         </div>
@@ -365,9 +375,26 @@ export default function Dashboard() {
       ) : null}
 
       {activeSection === 'devices' || activeSection === 'overview' ? <section className="panel">
-        <h2>Activos registrados</h2>
+        <div className="panel-heading">
+          <div>
+            <h2>Activos registrados</h2>
+            <p className="muted">Busca por host, IP, tipo, MAC, serie o estado.</p>
+          </div>
+        </div>
         {devices.length ? (
-          <div className="table-wrap">
+          <>
+          <ListControls
+            search={deviceList.search}
+            onSearchChange={deviceList.setSearch}
+            page={deviceList.page}
+            pageSize={deviceList.pageSize}
+            total={deviceList.total}
+            onPageChange={deviceList.setPage}
+            onPageSizeChange={deviceList.setPageSize}
+            placeholder="Host, IP, MAC, serie..."
+            label="Buscar activos de red"
+          />
+          {deviceList.pageItems.length ? <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -376,7 +403,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {devices.map((device) => (
+                {deviceList.pageItems.map((device) => (
                   <tr key={device.id_dispositivo}>
                     <td>{device.nombre_host}{device.fqdn ? <small>{device.fqdn}</small> : null}</td>
                     <td>{device.categoria} · {device.fabricante} {device.modelo}</td>
@@ -395,7 +422,8 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div> : <p className="muted">No hay activos que coincidan con la búsqueda.</p>}
+          </>
         ) : <p className="muted">Todavía no hay activos registrados.</p>}
       </section> : null}
 
@@ -404,6 +432,8 @@ export default function Dashboard() {
         <MonitoringPanel apiRequest={apiRequest} devices={devices} user={user} />
       ) : null}
       {activeSection === 'racks' ? <RackElevationPanel apiRequest={apiRequest} racks={racks} devices={devices} user={user} /> : null}
+      {activeSection === 'sandbox' ? <SandboxPanel apiRequest={apiRequest} devices={devices} user={user} /> : null}
+      {activeSection === 'audit' && (user?.rol === 'Admin' || user?.rol === 'Auditor') ? <AuditPanel apiRequest={apiRequest} /> : null}
       
       {activeSection === 'topology' ? (
         <section className="panel">
@@ -427,11 +457,22 @@ export default function Dashboard() {
             <div className="form-actions"><button type="submit">Crear usuario</button></div>
           </form>
 
+          <ListControls
+            search={userList.search}
+            onSearchChange={userList.setSearch}
+            page={userList.page}
+            pageSize={userList.pageSize}
+            total={userList.total}
+            onPageChange={userList.setPage}
+            onPageSizeChange={userList.setPageSize}
+            placeholder="Nombre o correo"
+            label="Buscar usuarios"
+          />
           <div className="table-wrap">
             <table>
               <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Último acceso</th></tr></thead>
               <tbody>
-                {users.map((targetUser) => (
+                {userList.pageItems.map((targetUser) => (
                   <tr key={targetUser.id_usuario}>
                     <td>{targetUser.nombre_usuario}</td>
                     <td>{targetUser.correo}</td>
@@ -451,6 +492,7 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
+          {!userList.pageItems.length ? <p className="muted">No hay usuarios que coincidan con la búsqueda.</p> : null}
         </section>
       ) : null}
       </div>

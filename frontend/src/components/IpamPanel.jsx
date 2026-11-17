@@ -1,18 +1,31 @@
 import { useEffect, useState } from 'react';
 import { formatApiError } from '../utils/errors';
+import ListControls from './ListControls';
 
-const PAGE_SIZE = 64;
 const emptySubnet = { cidr: '', etiqueta_vlan: '', nombre_segmento: '', descripcion: '' };
 
 export default function IpamPanel({ apiRequest, user }) {
   const [subnets, setSubnets] = useState([]);
+  const [subnetSearch, setSubnetSearch] = useState('');
   const [selectedSubnetId, setSelectedSubnetId] = useState('');
   const [addresses, setAddresses] = useState({ ips: [], total: 0 });
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [ipSearch, setIpSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [subnetForm, setSubnetForm] = useState(emptySubnet);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const selectedSubnet = subnets.find((subnet) => String(subnet.id_vlan) === selectedSubnetId);
+  const matchingSubnets = subnets.filter((subnet) => (
+    `VLAN ${subnet.etiqueta_vlan} ${subnet.nombre_segmento} ${subnet.cidr}`
+      .toLocaleLowerCase()
+      .includes(subnetSearch.trim().toLocaleLowerCase())
+  ));
+  const visibleSubnets = selectedSubnet && !matchingSubnets.includes(selectedSubnet)
+    ? [selectedSubnet, ...matchingSubnets]
+    : matchingSubnets;
 
   const loadSubnets = async (preferredId) => {
     const items = await apiRequest('/api/v1/ipam/subnets');
@@ -26,8 +39,13 @@ export default function IpamPanel({ apiRequest, user }) {
       setAddresses({ ips: [], total: 0 });
       return;
     }
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(pageSize),
+    });
+    if (appliedSearch.trim()) params.set('search', appliedSearch.trim());
     const result = await apiRequest(
-      `/api/v1/ipam/subnets/${selectedSubnetId}/addresses?offset=${offset}&limit=${PAGE_SIZE}`,
+      `/api/v1/ipam/subnets/${selectedSubnetId}/addresses?${params}`,
     );
     setAddresses(result);
   };
@@ -54,11 +72,17 @@ export default function IpamPanel({ apiRequest, user }) {
   useEffect(() => {
     let active = true;
     if (!selectedSubnetId) return undefined;
-    apiRequest(
-      `/api/v1/ipam/subnets/${selectedSubnetId}/addresses?offset=${offset}&limit=${PAGE_SIZE}`,
-    )
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(pageSize),
+    });
+    if (appliedSearch.trim()) params.set('search', appliedSearch.trim());
+    apiRequest(`/api/v1/ipam/subnets/${selectedSubnetId}/addresses?${params}`)
       .then((result) => {
-        if (active) setAddresses(result);
+        if (active) {
+          setAddresses(result);
+          setError('');
+        }
       })
       .catch((loadError) => {
         if (active) setError(formatApiError(loadError));
@@ -66,7 +90,7 @@ export default function IpamPanel({ apiRequest, user }) {
     return () => {
       active = false;
     };
-  }, [apiRequest, offset, selectedSubnetId]);
+  }, [apiRequest, appliedSearch, offset, pageSize, selectedSubnetId]);
 
   const createSubnet = async (event) => {
     event.preventDefault();
@@ -83,6 +107,8 @@ export default function IpamPanel({ apiRequest, user }) {
       });
       setSubnetForm(emptySubnet);
       setOffset(0);
+      setIpSearch('');
+      setAppliedSearch('');
       await loadSubnets(String(created.id_vlan));
       setNotice('Subred creada.');
     } catch (requestError) {
@@ -174,6 +200,15 @@ export default function IpamPanel({ apiRequest, user }) {
       {subnets.length ? (
         <>
           <label className="ipam-subnet-select">
+            Buscar subred
+            <input
+              type="search"
+              value={subnetSearch}
+              onChange={(event) => setSubnetSearch(event.target.value)}
+              placeholder="VLAN, nombre o CIDR"
+            />
+          </label>
+          <label className="ipam-subnet-select">
             Subred
             <select
               value={selectedSubnetId}
@@ -182,13 +217,34 @@ export default function IpamPanel({ apiRequest, user }) {
                 setSelectedSubnetId(event.target.value);
               }}
             >
-              {subnets.map((subnet) => (
+              {visibleSubnets.map((subnet) => (
                 <option key={subnet.id_vlan} value={subnet.id_vlan}>
                   VLAN {subnet.etiqueta_vlan} · {subnet.nombre_segmento} · {subnet.cidr} · {subnet.total_ips} IPs
                 </option>
               ))}
             </select>
           </label>
+          <ListControls
+            search={appliedSearch}
+            onSearchChange={setAppliedSearch}
+            draftSearch={ipSearch}
+            onDraftSearchChange={setIpSearch}
+            onSearchSubmit={() => {
+              setAppliedSearch(ipSearch.trim());
+              setOffset(0);
+            }}
+            submitSearch
+            page={Math.floor(offset / pageSize)}
+            pageSize={pageSize}
+            total={addresses.total}
+            onPageChange={(page) => setOffset(page * pageSize)}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setOffset(0);
+            }}
+            placeholder="IP exacta o rango CIDR"
+            label="Buscar IP o rango CIDR"
+          />
           <div className="table-wrap">
             <table>
               <thead><tr><th>Dirección IP</th><th>Estado</th><th>Uso / activo</th>{user.rol !== 'Auditor' ? <th>Acción</th> : null}</tr></thead>
@@ -210,22 +266,11 @@ export default function IpamPanel({ apiRequest, user }) {
                     ) : null}
                   </tr>
                 ))}
+                {!addresses.ips.length ? (
+                  <tr><td colSpan={user.rol !== 'Auditor' ? 4 : 3} className="muted">No hay direcciones que coincidan con la búsqueda.</td></tr>
+                ) : null}
               </tbody>
             </table>
-          </div>
-          <div className="form-actions ipam-pagination">
-            <button type="button" className="secondary-button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>Anterior</button>
-            <span className="muted">
-              {addresses.total ? `${offset + 1}–${Math.min(offset + addresses.ips.length, addresses.total)} de ${addresses.total}` : 'Sin direcciones'}
-            </span>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={offset + PAGE_SIZE >= addresses.total}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-            >
-              Siguiente
-            </button>
           </div>
         </>
       ) : null}

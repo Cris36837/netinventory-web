@@ -1,37 +1,67 @@
 import { useEffect, useState } from 'react';
 import { formatApiError } from '../utils/errors';
+import ListControls from './ListControls';
+import useSearchPagination from '../utils/useSearchPagination';
 
 export default function MonitoringPanel({ apiRequest, devices, user }) {
   const [statuses, setStatuses] = useState([]);
   const [results, setResults] = useState([]);
+  const [resultsTotal, setResultsTotal] = useState(0);
+  const [resultsOffset, setResultsOffset] = useState(0);
+  const [resultsPageSize, setResultsPageSize] = useState(20);
+  const [resultsSearch, setResultsSearch] = useState('');
+  const [appliedResultsSearch, setAppliedResultsSearch] = useState('');
   const [deviceId, setDeviceId] = useState('');
+  const [deviceSearch, setDeviceSearch] = useState('');
   const [protocol, setProtocol] = useState('tcp');
   const [ports, setPorts] = useState('22, 80, 443');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [working, setWorking] = useState(false);
   const canTest = user.rol === 'Admin' || user.rol === 'Técnico';
+  const statusList = useSearchPagination(statuses.filter((item) => item.ip_gestion));
+  const matchingDevices = devices.filter((device) => (
+    `${device.nombre_host} ${device.ip_gestion || ''}`
+      .toLocaleLowerCase()
+      .includes(deviceSearch.trim().toLocaleLowerCase())
+  ));
+  const selectedDevice = devices.find((device) => String(device.id_dispositivo) === deviceId);
+  const visibleDevices = selectedDevice && !matchingDevices.includes(selectedDevice)
+    ? [selectedDevice, ...matchingDevices]
+    : matchingDevices;
 
   const refresh = async () => {
+    const params = new URLSearchParams({
+      offset: String(resultsOffset),
+      limit: String(resultsPageSize),
+    });
+    if (appliedResultsSearch.trim()) params.set('search', appliedResultsSearch.trim());
     const [nextStatuses, nextResults] = await Promise.all([
       apiRequest('/api/v1/monitoring/status'),
-      apiRequest('/api/v1/monitoring/results?limit=20'),
+      apiRequest(`/api/v1/monitoring/results/page?${params}`),
     ]);
     setStatuses(nextStatuses);
-    setResults(nextResults);
+    setResults(nextResults.items);
+    setResultsTotal(nextResults.total);
   };
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
+        const params = new URLSearchParams({
+          offset: String(resultsOffset),
+          limit: String(resultsPageSize),
+        });
+        if (appliedResultsSearch.trim()) params.set('search', appliedResultsSearch.trim());
         const [nextStatuses, nextResults] = await Promise.all([
           apiRequest('/api/v1/monitoring/status'),
-          apiRequest('/api/v1/monitoring/results?limit=20'),
+          apiRequest(`/api/v1/monitoring/results/page?${params}`),
         ]);
         if (active) {
           setStatuses(nextStatuses);
-          setResults(nextResults);
+          setResults(nextResults.items);
+          setResultsTotal(nextResults.total);
           setError('');
         }
       } catch (loadError) {
@@ -44,7 +74,7 @@ export default function MonitoringPanel({ apiRequest, devices, user }) {
       active = false;
       window.clearInterval(timer);
     };
-  }, [apiRequest]);
+  }, [apiRequest, appliedResultsSearch, resultsOffset, resultsPageSize]);
 
   const runPing = async () => {
     if (!deviceId) return;
@@ -103,10 +133,19 @@ export default function MonitoringPanel({ apiRequest, devices, user }) {
           <h2>Prueba manual</h2>
           <p className="muted">Las pruebas se ejecutan únicamente contra activos registrados con IP de gestión.</p>
           <label className="monitoring-field">
+            Buscar activo
+            <input
+              type="search"
+              value={deviceSearch}
+              onChange={(event) => setDeviceSearch(event.target.value)}
+              placeholder="Nombre o IP"
+            />
+          </label>
+          <label className="monitoring-field">
             Activo
             <select value={deviceId} onChange={(event) => setDeviceId(event.target.value)}>
               <option value="">Selecciona un activo</option>
-              {devices.map((device) => (
+              {visibleDevices.map((device) => (
                 <option
                   key={device.id_dispositivo}
                   value={device.id_dispositivo}
@@ -153,11 +192,22 @@ export default function MonitoringPanel({ apiRequest, devices, user }) {
         </div>
         {error ? <div className="error-box page-message">{error}</div> : null}
         {notice ? <div className="success-box page-message">{notice}</div> : null}
+        <ListControls
+          search={statusList.search}
+          onSearchChange={statusList.setSearch}
+          page={statusList.page}
+          pageSize={statusList.pageSize}
+          total={statusList.total}
+          onPageChange={statusList.setPage}
+          onPageSizeChange={statusList.setPageSize}
+          placeholder="Nombre del activo o IP"
+          label="Buscar disponibilidad"
+        />
         <div className="table-wrap">
           <table>
             <thead><tr><th>Activo</th><th>IP de gestión</th><th>Disponibilidad</th><th>Última prueba</th><th>Latencia</th></tr></thead>
             <tbody>
-              {statuses.filter((item) => item.ip_gestion).map((item) => (
+              {statusList.pageItems.map((item) => (
                 <tr key={item.id_dispositivo}>
                   <td>{item.nombre_host}</td>
                   <td>{item.ip_gestion}</td>
@@ -174,12 +224,33 @@ export default function MonitoringPanel({ apiRequest, devices, user }) {
               ))}
             </tbody>
           </table>
-          {!statuses.some((item) => item.ip_gestion) ? <p className="muted">No hay activos con IP de gestión para monitorear.</p> : null}
+          {!statusList.total ? <p className="muted">No hay activos con IP de gestión para monitorear.</p> : null}
         </div>
       </article>
 
       <article className="panel">
         <h2>Historial reciente</h2>
+        <ListControls
+          search={appliedResultsSearch}
+          onSearchChange={setAppliedResultsSearch}
+          draftSearch={resultsSearch}
+          onDraftSearchChange={setResultsSearch}
+          onSearchSubmit={() => {
+            setAppliedResultsSearch(resultsSearch.trim());
+            setResultsOffset(0);
+          }}
+          submitSearch
+          page={Math.floor(resultsOffset / resultsPageSize)}
+          pageSize={resultsPageSize}
+          total={resultsTotal}
+          onPageChange={(page) => setResultsOffset(page * resultsPageSize)}
+          onPageSizeChange={(size) => {
+            setResultsPageSize(size);
+            setResultsOffset(0);
+          }}
+          placeholder="Host, IP, tipo, resultado..."
+          label="Buscar historial de monitoreo"
+        />
         {results.length ? (
           <div className="table-wrap">
             <table>
@@ -201,7 +272,11 @@ export default function MonitoringPanel({ apiRequest, devices, user }) {
               </tbody>
             </table>
           </div>
-        ) : <p className="muted">Todavía no hay resultados de sondeo.</p>}
+        ) : (
+          <p className="muted">
+            {appliedResultsSearch ? 'No hay resultados que coincidan con la búsqueda.' : 'Todavía no hay resultados de sondeo.'}
+          </p>
+        )}
       </article>
     </section>
   );

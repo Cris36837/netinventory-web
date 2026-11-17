@@ -1,7 +1,7 @@
 import ipaddress
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import DireccionIP, Dispositivo, Subred, Usuario
 from ..schemas import IPReservationCreate, SubnetCreate
+from .audit import record_audit
 from .auth import get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1/ipam", tags=["Módulo IPAM"])
@@ -58,7 +59,8 @@ async def list_subnets(
 @router.post("/subnets", status_code=status.HTTP_201_CREATED)
 async def create_subnet(
     body: SubnetCreate,
-    _: Annotated[Usuario, Depends(editor_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
     db: AsyncSession = Depends(get_db),
 ):
     network = ipaddress.ip_network(body.cidr)
@@ -74,6 +76,11 @@ async def create_subnet(
     subnet = Subred(**body.model_dump())
     db.add(subnet)
     try:
+        await db.flush()
+        await record_audit(
+            db, user, "ipam.subnet.created",
+            f"Subred VLAN {subnet.etiqueta_vlan} ({subnet.cidr}) creada", request,
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -99,13 +106,46 @@ async def list_subnet_addresses(
     db: AsyncSession = Depends(get_db),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=64, ge=1, le=256),
+    search: str | None = Query(default=None, max_length=50),
 ):
     subnet = await get_subnet(db, subnet_id)
     network = ipaddress.ip_network(subnet.cidr)
     first, total = host_range(network)
+    result_offset = offset
+    result_total = total
+    first_index = 0
+    if search and search.strip():
+        term = search.strip()
+        try:
+            address = ipaddress.ip_address(term)
+        except ValueError:
+            try:
+                search_network = ipaddress.ip_network(term, strict=False)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Busca una IP exacta o un rango CIDR válido",
+                ) from exc
+            if search_network.version != network.version:
+                result_total = 0
+            else:
+                first_host = first
+                last_host = first + total - 1
+                range_start = max(first_host, int(search_network.network_address))
+                range_end = min(last_host, int(search_network.broadcast_address))
+                result_total = max(0, range_end - range_start + 1)
+                first_index = range_start - first_host if result_total else 0
+        else:
+            index = int(address) - first
+            if address.version == network.version and 0 <= index < total:
+                first_index = index
+                result_total = 1
+            else:
+                result_total = 0
+
     addresses = [
-        str(ipaddress.ip_address(first + index))
-        for index in range(offset, min(offset + limit, total))
+        str(ipaddress.ip_address(first + first_index + index))
+        for index in range(offset, min(offset + limit, result_total))
     ]
     reservations: dict[str, DireccionIP] = {}
     devices: dict[str, Dispositivo] = {}
@@ -138,14 +178,22 @@ async def list_subnet_addresses(
             }
         )
 
-    return {"subred_id": subnet_id, "total": total, "offset": offset, "limit": limit, "ips": entries}
+    return {
+        "subred_id": subnet_id,
+        "total": result_total,
+        "offset": result_offset,
+        "limit": limit,
+        "search": search,
+        "ips": entries,
+    }
 
 
 @router.post("/subnets/{subnet_id}/reservations", status_code=status.HTTP_201_CREATED)
 async def reserve_address(
     subnet_id: int,
     body: IPReservationCreate,
-    _: Annotated[Usuario, Depends(editor_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
     db: AsyncSession = Depends(get_db),
 ):
     subnet = await get_subnet(db, subnet_id)
@@ -182,6 +230,10 @@ async def reserve_address(
         existing.estado_asignacion = "reservada"
         existing.proposito = body.proposito
     try:
+        await record_audit(
+            db, user, "ipam.address.reserved",
+            f"IP {body.direccion} reservada en subred {subnet_id}", request,
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -198,11 +250,16 @@ async def reserve_address(
 @router.delete("/reservations/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def release_address(
     address_id: int,
-    _: Annotated[Usuario, Depends(editor_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
     db: AsyncSession = Depends(get_db),
 ):
     reservation = await db.get(DireccionIP, address_id)
     if reservation is None:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    await record_audit(
+        db, user, "ipam.address.released",
+        f"Reserva de IP {reservation.direccion} liberada", request,
+    )
     await db.delete(reservation)
     await db.commit()

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..models import BastidorRack, DireccionIP, Dispositivo, TipoDispositivo, Usuario
 from ..schemas import DeviceCreate, DeviceResponse, DeviceTypeResponse, DeviceUpdate
+from .audit import record_audit
 from .auth import get_current_user, require_roles
 
 router = APIRouter(prefix="/api/v1", tags=["Activos de red"])
@@ -91,7 +92,8 @@ async def list_devices(
 @router.post("/devices", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 async def create_device(
     body: DeviceCreate,
-    _: Annotated[Usuario, Depends(editor_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
     db: AsyncSession = Depends(get_db),
 ):
     await ensure_references(db, body.id_tipo, body.id_rack)
@@ -107,6 +109,10 @@ async def create_device(
     device = Dispositivo(**body.model_dump())
     db.add(device)
     try:
+        await db.flush()
+        await record_audit(
+            db, user, "device.created", f"Activo '{device.nombre_host}' registrado", request,
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -144,7 +150,8 @@ async def get_device(
 async def update_device(
     device_id: int,
     body: DeviceUpdate,
-    _: Annotated[Usuario, Depends(editor_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -178,6 +185,13 @@ async def update_device(
     for field, value in changes.items():
         setattr(device, field, value)
 
+    await record_audit(
+        db,
+        user,
+        "device.updated",
+        f"Activo '{device.nombre_host}' actualizado; campos: {', '.join(changes.keys())}",
+        request,
+    )
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -198,11 +212,15 @@ async def update_device(
 @router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_device(
     device_id: int,
-    _: Annotated[Usuario, Depends(admin_required)],
+    request: Request,
+    user: Annotated[Usuario, Depends(admin_required)],
     db: AsyncSession = Depends(get_db),
 ):
     device = await db.get(Dispositivo, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+    await record_audit(
+        db, user, "device.deleted", f"Activo '{device.nombre_host}' eliminado", request,
+    )
     await db.delete(device)
     await db.commit()

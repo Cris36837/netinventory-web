@@ -168,3 +168,45 @@ class AuditLog(Base):
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     usuario = relationship("Usuario")
+
+
+class SandboxTemplate(Base):
+    __tablename__ = "sandbox_templates"
+
+    id_plantilla = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(120), nullable=False)
+    descripcion = Column(String(500))
+    fabricante = Column(String(100))
+    configuracion = Column(JSON, nullable=False)
+    id_usuario = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id_usuario", ondelete="SET NULL"),
+        nullable=True,
+    )
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    usuario = relationship("Usuario")
+
+
+class SandboxSimulation(Base):
+    __tablename__ = "sandbox_simulations"
+
+    id_simulacion = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id_usuario", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tipo_objetivo = Column(String(30), nullable=False)
+    nombre_objetivo = Column(String(120), nullable=False)
+    id_plantilla = Column(
+        Integer,
+        ForeignKey("sandbox_templates.id_plantilla", ondelete="SET NULL"),
+        nullable=True,
+    )
+    configuracion_base = Column(JSON, nullable=False)
+    cambios = Column(JSON, nullable=False)
+    diferencias = Column(JSON, nullable=False)
+    validaciones = Column(JSON, nullable=False)
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    usuario = relationship("Usuario")
+    plantilla = relationship("SandboxTemplate")

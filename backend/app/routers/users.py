@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from passlib.context import CryptContext
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..models import Rol, Usuario
 from ..schemas import UserCreate, UserResponse, UserUpdate
+from .audit import record_audit
 from .auth import require_roles
 
 router = APIRouter(prefix="/api/v1", tags=["Usuarios y roles"])
@@ -53,7 +54,8 @@ async def list_users(
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: UserCreate,
-    _: Annotated[Usuario, Depends(admin_required)],
+    request: Request,
+    actor: Annotated[Usuario, Depends(admin_required)],
     db: AsyncSession = Depends(get_db),
 ):
     existing = await db.execute(select(Usuario.id_usuario).where(Usuario.correo == body.correo.lower()))
@@ -73,6 +75,11 @@ async def create_user(
         activo=True,
     )
     db.add(user)
+    await db.flush()
+    await record_audit(
+        db, actor, "user.created",
+        f"Usuario '{user.nombre_usuario}' creado con rol '{role.nombre}'", request,
+    )
     await db.commit()
     await db.refresh(user)
     await db.refresh(user, attribute_names=["rol"])
@@ -83,7 +90,8 @@ async def create_user(
 async def update_user(
     user_id: UUID,
     body: UserUpdate,
-    _: Annotated[Usuario, Depends(admin_required)],
+    request: Request,
+    actor: Annotated[Usuario, Depends(admin_required)],
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -140,6 +148,11 @@ async def update_user(
     if "activo" in changes and changes["activo"] is not None:
         user.activo = changes["activo"]
 
+    changed_fields = ", ".join(sorted(changes))
+    await record_audit(
+        db, actor, "user.updated",
+        f"Usuario '{user.nombre_usuario}' actualizado; campos: {changed_fields}", request,
+    )
     await db.commit()
     await db.refresh(user)
     await db.refresh(user, attribute_names=["rol"])

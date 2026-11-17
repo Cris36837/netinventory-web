@@ -155,6 +155,42 @@ async def monitoring_status(
     ]
 
 
+@router.get("/monitoring/results/page")
+async def paginated_monitoring_results(
+    _: Annotated[Usuario, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=120),
+):
+    query = (
+        select(ResultadoSondeo, Dispositivo)
+        .join(Dispositivo, Dispositivo.id_dispositivo == ResultadoSondeo.id_dispositivo)
+    )
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            Dispositivo.nombre_host.ilike(term)
+            | Dispositivo.ip_gestion.ilike(term)
+            | ResultadoSondeo.tipo.ilike(term)
+            | ResultadoSondeo.estado.ilike(term)
+            | ResultadoSondeo.origen.ilike(term)
+        )
+    total = await db.scalar(
+        select(func.count())
+        .select_from(query.subquery())
+    )
+    result = await db.execute(
+        query.order_by(ResultadoSondeo.fecha_sondeo.desc(), ResultadoSondeo.id_resultado.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return {
+        "items": [serialize_result(probe, device) for probe, device in result.all()],
+        "total": total or 0,
+    }
+
+
 @router.get("/monitoring/results")
 async def monitoring_results(
     _: Annotated[Usuario, Depends(get_current_user)],

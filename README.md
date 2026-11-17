@@ -2,7 +2,7 @@
 
 Sistema web para gestión y monitoreo de infraestructura de red. El repositorio contiene una aplicación React/Vite, una API FastAPI y servicios PostgreSQL y Redis ejecutables con Docker Compose.
 
-> El alcance actual incluye autenticación, usuarios/roles, gestión de activos, IPAM, diagnóstico manual y monitoreo periódico. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
+> El alcance actual incluye autenticación, usuarios/roles, gestión de activos, IPAM, diagnóstico manual, monitoreo periódico, reportes de auditoría y un sandbox de simulación de configuraciones. Redis está incluido en la infraestructura de desarrollo, pero aún no tiene una función conectada a la aplicación.
 
 ## Requisitos
 
@@ -184,11 +184,13 @@ El formulario del dashboard permite registrar y editar activos. Admin puede adem
 
 El dashboard permite crear subredes CIDR sin traslapes, consultar sus direcciones utilizables en páginas, reservar una IP libre y liberar una reserva. Las IP configuradas en activos aparecen como ocupadas; las direcciones de red y broadcast IPv4 no se ofrecen como hosts. Técnicos y Admin pueden gestionar subredes y reservas; Auditor puede consultar la tabla IPAM.
 
-La API expone `GET/POST /api/v1/ipam/subnets`, `GET /api/v1/ipam/subnets/{id}/addresses`, `POST /api/v1/ipam/subnets/{id}/reservations` y `DELETE /api/v1/ipam/reservations/{id_ip}`. El alta y edición de activos valida y normaliza IP y MAC, y rechaza IPs reservadas. Las restricciones únicas en la base de datos impiden repetir las IP y MAC entre activos, así como repetir una IP reservada.
+La API expone `GET/POST /api/v1/ipam/subnets`, `GET /api/v1/ipam/subnets/{id}/addresses`, `POST /api/v1/ipam/subnets/{id}/reservations` y `DELETE /api/v1/ipam/reservations/{id_ip}`. La consulta de direcciones acepta `offset`, `limit` y búsqueda opcional por IP exacta o rango CIDR. El alta y edición de activos valida y normaliza IP y MAC, y rechaza IPs reservadas. Las restricciones únicas en la base de datos impiden repetir las IP y MAC entre activos, así como repetir una IP reservada.
 
 ## Sprint 5: diagnóstico manual y monitoreo
 
 El dashboard incluye un menú lateral que organiza el resumen, activos, IPAM, diagnóstico y administración de usuarios según el rol autenticado. Admin y Técnico pueden probar conectividad ICMP y ejecutar escaneos manuales TCP/UDP contra dispositivos registrados con IP de gestión. Cada solicitud admite hasta 100 puertos únicos; UDP puede reportarse como `open|filtered` cuando no hay respuesta, porque un datagrama sin respuesta no permite afirmar que el puerto esté cerrado.
+
+Las tablas de activos, usuarios, monitoreo, simulaciones y auditoría se presentan en páginas ajustables de 10, 20 o 50 filas, con búsqueda en los listados. El historial de monitoreo admite búsqueda y paginación en el servidor.
 
 Un worker asíncrono inicia con la API y sondea por ICMP los dispositivos operativos que tienen IP de gestión. El intervalo predeterminado es de 60 segundos y puede ajustarse con `MONITORING_INTERVAL_SECONDS` (mínimo 15 segundos). Los resultados manuales y automáticos quedan en `resultados_sondeo`; las tablas faltantes se crean al iniciar, incluso si se conserva un volumen PostgreSQL.
 
@@ -198,12 +200,46 @@ Un worker asíncrono inicia con la API y sondea por ICMP los dispositivos operat
 | `POST` | `/api/v1/devices/{device_id}/diagnostics/ports` | Admin o Técnico | Escanea hasta 100 puertos TCP o UDP del activo |
 | `GET` | `/api/v1/monitoring/status` | Usuario autenticado | Consulta el último sondeo automático por activo |
 | `GET` | `/api/v1/monitoring/results?limit=20` | Usuario autenticado | Consulta el historial reciente (máximo 100) |
+| `GET` | `/api/v1/monitoring/results/page?offset=0&limit=20&search=` | Usuario autenticado | Busca y pagina el historial reciente |
 
 El worker requiere que el ejecutor `ping` esté disponible. La imagen Docker instala `iputils-ping`; en ejecución local debe estar instalado en el sistema operativo. Los endpoints manuales solo aceptan el identificador de un activo existente, no una IP arbitraria. Auditor puede consultar estado e historial, pero no iniciar pruebas.
 
 ### Inicialización de la base de datos
 
 `database/init.sql` define roles, usuarios y las tablas necesarias para el CRUD del sprint. Al arrancar, el backend crea de forma idempotente las tablas faltantes y asegura que existan los tres roles y tipos iniciales. Así el mismo arranque también prepara tablas nuevas cuando se conserva un volumen PostgreSQL de una ejecución anterior.
+
+## Sprint 9: auditoría y sandbox de configuración
+
+Admin y Auditor pueden consultar la bitácora con filtros por acción, usuario y rango de fechas, paginar resultados y exportar el filtro aplicado a CSV. La exportación limita cada archivo a 10,000 eventos y neutraliza celdas que podrían interpretarse como fórmulas en una hoja de cálculo. La API registra cambios de usuarios, activos, reservas IPAM y las operaciones del sandbox; los eventos existentes anteriores a esta versión no se reconstruyen retroactivamente.
+
+Admin y Técnico pueden importar plantillas JSON, generar una plantilla genérica o tomar los valores iniciales de un activo registrado, y simular cambios sobre un objetivo etiquetado como container o virtual appliance. El sandbox compara cada parámetro, valida hostname, IP de gestión y VLAN cuando están presentes, y guarda resultados e historial. Los documentos JSON deben ser objetos de configuración, con un máximo de 100 claves principales y 32 KB.
+
+**Importante:** es una simulación local de validación y diferencias; no se conecta a Docker, appliances ni dispositivos, y no aplica cambios a infraestructura real. Las plantillas, simulaciones y sus eventos de auditoría se conservan en PostgreSQL.
+
+| Método | Ruta | Permiso | Uso |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/audit-logs?accion=&usuario=&desde=&hasta=&offset=&limit=` | Admin o Auditor | Filtra/pagina eventos |
+| `GET` | `/api/v1/audit-logs/export?accion=&usuario=&desde=&hasta=` | Admin o Auditor | Exporta los eventos filtrados en CSV |
+| `GET` | `/api/v1/sandbox/templates` | Usuario autenticado | Lista plantillas |
+| `POST` | `/api/v1/sandbox/templates` | Admin o Técnico | Carga una plantilla JSON |
+| `POST` | `/api/v1/sandbox/templates/generate` | Admin o Técnico | Genera una plantilla genérica o desde un activo |
+| `GET` | `/api/v1/sandbox/simulations` | Usuario autenticado | Consulta las últimas 100 simulaciones |
+| `POST` | `/api/v1/sandbox/simulations` | Admin o Técnico | Valida y compara una configuración sin aplicarla |
+
+Ejemplo de simulación:
+
+```json
+{
+  "tipo_objetivo": "container",
+  "nombre_objetivo": "lab-netinventory",
+  "id_plantilla": 1,
+  "cambios": {
+    "hostname": "edge-lab-01",
+    "management_ip": "192.0.2.20",
+    "vlan": 20
+  }
+}
+```
 
 El usuario `admin@netinventory.com` con contraseña `admin123` es una cuenta **solo de desarrollo**. En una base persistente existente, un conflicto de correo no reemplaza la cuenta ni su contraseña. Si la contraseña no es válida, inicia sesión con una cuenta Admin existente y restablece la contraseña mediante gestión de usuarios, o prepara explícitamente un entorno de desarrollo nuevo. No borres volúmenes con datos que quieras conservar.
 
