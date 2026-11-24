@@ -1,6 +1,9 @@
+import csv
+import io
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +18,208 @@ from .auth import get_current_user, require_roles
 router = APIRouter(prefix="/api/v1", tags=["Activos de red"])
 editor_required = require_roles("Admin", "Técnico")
 admin_required = require_roles("Admin")
+DEVICE_IMPORT_FIELDS = {
+    "id_tipo",
+    "id_rack",
+    "nombre_host",
+    "fqdn",
+    "numero_serie",
+    "ip_gestion",
+    "mac_address",
+    "ru_inicio",
+    "estado_operativo",
+}
+DEVICE_IMPORT_REQUIRED_FIELDS = {"id_tipo", "nombre_host"}
+DEVICE_IMPORT_UNIQUE_FIELDS = (
+    "nombre_host",
+    "fqdn",
+    "numero_serie",
+    "ip_gestion",
+    "mac_address",
+)
+MAX_DEVICE_IMPORT_BYTES = 2 * 1024 * 1024
+MAX_DEVICE_IMPORT_ROWS = 1000
+MAX_DEVICE_IMPORT_REPORT_ROWS = 100
+
+
+def parse_device_csv(content: bytes) -> tuple[list[dict], list[dict]]:
+    if len(content) > MAX_DEVICE_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo CSV no puede superar 2 MB")
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="El archivo debe estar codificado como UTF-8",
+        ) from exc
+
+    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+    try:
+        headers = next(reader, None)
+        if not headers:
+            raise HTTPException(status_code=422, detail="El archivo CSV está vacío")
+        headers = [header.strip() for header in headers]
+        if len(set(headers)) != len(headers):
+            raise HTTPException(status_code=422, detail="El CSV contiene encabezados repetidos")
+        missing = DEVICE_IMPORT_REQUIRED_FIELDS - set(headers)
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Faltan columnas obligatorias: {', '.join(sorted(missing))}",
+            )
+        unknown = set(headers) - DEVICE_IMPORT_FIELDS
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Columnas no reconocidas: {', '.join(sorted(unknown))}",
+            )
+
+        parsed_rows = []
+        invalid_rows = []
+        for values in reader:
+            line = reader.line_num
+            if not values or all(not value.strip() for value in values):
+                continue
+            if len(parsed_rows) + len(invalid_rows) >= MAX_DEVICE_IMPORT_ROWS:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"El archivo no puede superar {MAX_DEVICE_IMPORT_ROWS} filas",
+                )
+            if len(values) != len(headers):
+                invalid_rows.append({
+                    "line": line,
+                    "kind": "invalid",
+                    "messages": ["La fila no coincide con la cantidad de columnas del encabezado"],
+                })
+                continue
+
+            raw_device = {
+                key: value.strip()
+                for key, value in zip(headers, values)
+                if value.strip()
+            }
+            try:
+                device = DeviceCreate.model_validate(raw_device)
+            except ValidationError as exc:
+                messages = [
+                    f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+                    for error in exc.errors()
+                ]
+                invalid_rows.append({
+                    "line": line,
+                    "kind": "invalid",
+                    "messages": messages,
+                })
+                continue
+            parsed_rows.append({"line": line, "device": device.model_dump()})
+    except csv.Error as exc:
+        raise HTTPException(status_code=422, detail="El archivo contiene CSV mal formado") from exc
+
+    if not parsed_rows and not invalid_rows:
+        raise HTTPException(status_code=422, detail="El CSV no contiene filas de datos")
+    return parsed_rows, invalid_rows
+
+
+async def analyze_device_csv(db: AsyncSession, content: bytes) -> dict:
+    parsed_rows, invalid_rows = parse_device_csv(content)
+    type_result = await db.execute(select(TipoDispositivo.id_tipo))
+    rack_result = await db.execute(select(BastidorRack.id_rack))
+    valid_type_ids = set(type_result.scalars())
+    valid_rack_ids = set(rack_result.scalars())
+
+    existing_result = await db.execute(
+        select(
+            Dispositivo.nombre_host,
+            Dispositivo.fqdn,
+            Dispositivo.numero_serie,
+            Dispositivo.ip_gestion,
+            Dispositivo.mac_address,
+        )
+    )
+    unique_values = {field: set() for field in DEVICE_IMPORT_UNIQUE_FIELDS}
+    for existing in existing_result.all():
+        for field in DEVICE_IMPORT_UNIQUE_FIELDS:
+            value = getattr(existing, field)
+            if value is not None:
+                unique_values[field].add(value)
+
+    reserved_ip_result = await db.execute(
+        select(DireccionIP.direccion).where(DireccionIP.estado_asignacion == "reservada")
+    )
+    reserved_ips = set(reserved_ip_result.scalars())
+
+    valid_rows = []
+    duplicate_rows = []
+    for row in parsed_rows:
+        device = row["device"]
+        missing_references = []
+        if device["id_tipo"] not in valid_type_ids:
+            missing_references.append("id_tipo no existe")
+        if device["id_rack"] is not None and device["id_rack"] not in valid_rack_ids:
+            missing_references.append("id_rack no existe")
+        if device["ip_gestion"] in reserved_ips:
+            missing_references.append("ip_gestion está reservada en IPAM")
+        if missing_references:
+            invalid_rows.append({
+                "line": row["line"],
+                "kind": "invalid",
+                "messages": missing_references,
+            })
+            continue
+
+        duplicate_fields = [
+            field
+            for field in DEVICE_IMPORT_UNIQUE_FIELDS
+            if device[field] is not None and device[field] in unique_values[field]
+        ]
+        if duplicate_fields:
+            duplicate_rows.append({
+                "line": row["line"],
+                "kind": "duplicate",
+                "nombre_host": device["nombre_host"],
+                "fields": duplicate_fields,
+            })
+            continue
+
+        for field in DEVICE_IMPORT_UNIQUE_FIELDS:
+            if device[field] is not None:
+                unique_values[field].add(device[field])
+        valid_rows.append(row)
+
+    issues = invalid_rows + duplicate_rows
+    active_count = sum(
+        row["device"]["estado_operativo"] == "activo"
+        for row in valid_rows
+    )
+    return {
+        "valid_rows": valid_rows,
+        "valid_count": len(valid_rows),
+        "duplicate_count": len(duplicate_rows),
+        "invalid_count": len(invalid_rows),
+        "active_count": active_count,
+        "issues": issues[:MAX_DEVICE_IMPORT_REPORT_ROWS],
+        "report_truncated": len(issues) > MAX_DEVICE_IMPORT_REPORT_ROWS,
+    }
+
+
+def serialize_device_import_report(analysis: dict) -> dict:
+    return {
+        "valid_count": analysis["valid_count"],
+        "duplicate_count": analysis["duplicate_count"],
+        "invalid_count": analysis["invalid_count"],
+        "active_count": analysis["active_count"],
+        "preview": [
+            {
+                "line": row["line"],
+                "nombre_host": row["device"]["nombre_host"],
+                "ip_gestion": row["device"]["ip_gestion"],
+                "estado_operativo": row["device"]["estado_operativo"],
+            }
+            for row in analysis["valid_rows"][:10]
+        ],
+        "issues": analysis["issues"],
+        "report_truncated": analysis["report_truncated"],
+    }
 
 
 def serialize_device(device: Dispositivo) -> DeviceResponse:
@@ -87,6 +292,58 @@ async def list_devices(
         )
     result = await db.execute(query)
     return [serialize_device(device) for device in result.scalars()]
+
+
+@router.post("/devices/import/preview")
+async def preview_device_import(
+    _: Annotated[Usuario, Depends(editor_required)],
+    db: AsyncSession = Depends(get_db),
+    file: UploadFile = File(...),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="Selecciona un archivo con extensión .csv")
+    content = await file.read(MAX_DEVICE_IMPORT_BYTES + 1)
+    analysis = await analyze_device_csv(db, content)
+    return serialize_device_import_report(analysis)
+
+
+@router.post("/devices/import")
+async def import_devices(
+    request: Request,
+    user: Annotated[Usuario, Depends(editor_required)],
+    db: AsyncSession = Depends(get_db),
+    file: UploadFile = File(...),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=422, detail="Selecciona un archivo con extensión .csv")
+    content = await file.read(MAX_DEVICE_IMPORT_BYTES + 1)
+    analysis = await analyze_device_csv(db, content)
+    devices_to_create = [Dispositivo(**row["device"]) for row in analysis["valid_rows"]]
+    if devices_to_create:
+        db.add_all(devices_to_create)
+        await record_audit(
+            db,
+            user,
+            "devices.bulk_imported",
+            (
+                f"Importación CSV: {len(devices_to_create)} activos; "
+                f"{analysis['duplicate_count']} duplicados; "
+                f"{analysis['invalid_count']} filas inválidas"
+            ),
+            request,
+        )
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Los datos cambiaron durante la importación; vuelve a generar la vista previa",
+            ) from exc
+    return {
+        **serialize_device_import_report(analysis),
+        "imported_count": len(devices_to_create),
+    }
 
 
 @router.post("/devices", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)

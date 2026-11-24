@@ -173,10 +173,14 @@ Todas las rutas salvo `POST /api/v1/auth/login` requieren `Authorization: Bearer
 | `GET` | `/api/v1/devices` | Usuario autenticado | Lista dispositivos; admite filtro `?search=` |
 | `GET` | `/api/v1/devices/{device_id}` | Usuario autenticado | Consulta un dispositivo |
 | `POST` | `/api/v1/devices` | Admin o Técnico | Registra un dispositivo |
+| `POST` | `/api/v1/devices/import/preview` | Admin o Técnico | Valida un archivo CSV y muestra filas válidas, duplicadas y con errores |
+| `POST` | `/api/v1/devices/import` | Admin o Técnico | Importa filas válidas no duplicadas de un CSV |
 | `PATCH` | `/api/v1/devices/{device_id}` | Admin o Técnico | Actualiza un dispositivo |
 | `DELETE` | `/api/v1/devices/{device_id}` | Admin | Elimina un dispositivo |
 
 Los dispositivos se almacenan en `DISPOSITIVOS` y se relacionan con `TIPOS_DISPOSITIVO`; se puede registrar un activo sin rack. El catálogo inicial ofrece las categorías Servidor, Switch, Router, PC e Impresora. Host, FQDN, número de serie e IP de gestión son únicos cuando se proporcionan; la IP se valida antes de guardarla.
+
+La sección **Importar activos** acepta CSV UTF-8 de hasta 2 MB y 1,000 filas. El encabezado requiere `id_tipo` y `nombre_host`; también admite `id_rack`, `fqdn`, `numero_serie`, `ip_gestion`, `mac_address`, `ru_inicio` y `estado_operativo`. Primero se genera una vista previa; se agregan los registros válidos, se reportan y omiten filas incorrectas o duplicadas, y nunca se sobrescriben activos existentes. Las filas activas requieren confirmación porque entrarán al sondeo automático. La importación se registra en la bitácora.
 
 El formulario del dashboard permite registrar y editar activos. Admin puede además crear usuarios, asignar roles y activar/desactivar cuentas. Técnico puede registrar y modificar dispositivos. Auditor únicamente puede consultar los dispositivos.
 

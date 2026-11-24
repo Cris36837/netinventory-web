@@ -393,6 +393,41 @@ td small {
   white-space: pre-line;
 }
 
+.import-warning {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  border-radius: 10px;
+  background: rgba(120, 53, 15, 0.25);
+  color: #fde68a;
+}
+
+.import-warning label {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: #f8fafc;
+  font-weight: 500;
+}
+
+.import-issues {
+  margin: 16px 0;
+  color: #cbd5e1;
+}
+
+.import-issues summary {
+  cursor: pointer;
+  color: #93c5fd;
+}
+
+.import-issues ul {
+  max-height: 260px;
+  overflow: auto;
+  padding-left: 22px;
+}
+
 .dashboard-shell {
   max-width: 1200px;
   margin: 0 auto;

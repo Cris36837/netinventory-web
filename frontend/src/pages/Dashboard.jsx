@@ -5,6 +5,7 @@ import MonitoringPanel from '../components/MonitoringPanel';
 import RackElevationPanel from '../components/RackElevationPanel';
 import AuditPanel from '../components/AuditPanel';
 import SandboxPanel from '../components/SandboxPanel';
+import DeviceImportPanel from '../components/DeviceImportPanel';
 import ListControls from '../components/ListControls';
 import { formatApiError } from '../utils/errors';
 import useSearchPagination from '../utils/useSearchPagination';
@@ -27,7 +28,9 @@ async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !(options.body instanceof FormData)
+        ? { 'Content-Type': 'application/json' }
+        : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -231,6 +234,9 @@ export default function Dashboard() {
           {[
             { id: 'overview', label: 'Resumen', icon: '◫' },
             { id: 'devices', label: 'Activos de red', icon: '▦' },
+            ...(['Admin', 'Técnico'].includes(user?.rol)
+              ? [{ id: 'device-import', label: 'Importar activos', icon: '⇧' }]
+              : []),
             { id: 'ipam', label: 'Direcciones IP', icon: '⌘' },
             { id: 'monitoring', label: 'Diagnóstico y monitoreo', icon: '⌁' },
             { id: 'topology', label: 'Topología de red', icon: '🗺️' },
@@ -264,6 +270,7 @@ export default function Dashboard() {
           <h1>{{
             overview: 'Resumen de infraestructura',
             devices: 'Activos de red',
+            'device-import': 'Importar activos desde CSV',
             ipam: 'Gestión de direcciones IP',
             monitoring: 'Diagnóstico y monitoreo',
             topology: 'Topología lógica de red',
@@ -428,6 +435,9 @@ export default function Dashboard() {
       </section> : null}
 
       {activeSection === 'ipam' ? <IpamPanel apiRequest={apiRequest} user={user} /> : null}
+      {activeSection === 'device-import' && ['Admin', 'Técnico'].includes(user?.rol) ? (
+        <DeviceImportPanel apiRequest={apiRequest} onImported={loadData} />
+      ) : null}
       {activeSection === 'monitoring' ? (
         <MonitoringPanel apiRequest={apiRequest} devices={devices} user={user} />
       ) : null}

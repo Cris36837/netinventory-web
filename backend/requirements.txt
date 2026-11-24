@@ -9,3 +9,4 @@ passlib[bcrypt]
 sqlalchemy[asyncio]
 asyncpg
 greenlet
+python-multipart
