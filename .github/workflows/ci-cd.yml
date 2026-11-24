@@ -70,7 +70,7 @@ jobs:
     name: Deploy to Kali
     needs: [frontend, backend, production-images]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-    runs-on: [self-hosted, linux, x64, netinventory]
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Update Kali deployment
         env:

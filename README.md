@@ -288,7 +288,7 @@ docker compose --env-file .env -f docker-compose.prod.yml ps
 
 El sitio queda disponible en `http://<IP-de-la-VM>:8080`. Para exponerlo públicamente configura HTTPS mediante un proxy inverso y no abras los puertos de PostgreSQL o Redis. Este Compose crea un volumen de producción separado; no copia automáticamente la base de datos local.
 
-Para habilitar el runner autohospedado, abre el repositorio en GitHub y ve a **Settings → Actions → Runners → New self-hosted runner**. Selecciona Linux x64 y sigue las instrucciones mostradas en Kali. Registra el runner con la etiqueta adicional `netinventory`, igual a la requerida por el workflow, y ejecútalo como servicio bajo un usuario no root. Ese usuario necesita acceso de escritura a `/opt/netinventory` y permiso para ejecutar Docker. Por ejemplo, con una cuenta de despliegue dedicada:
+Para habilitar el runner autohospedado, abre el repositorio en GitHub y ve a **Settings → Actions → Runners → New self-hosted runner**. Selecciona Linux x64 y sigue las instrucciones mostradas en Kali. El workflow usa las etiquetas predeterminadas `self-hosted`, `Linux` y `X64`. Ejecuta el runner como servicio bajo un usuario no root. Ese usuario necesita acceso de escritura a `/opt/netinventory` y permiso para ejecutar Docker. Por ejemplo, con una cuenta de despliegue dedicada:
 
 ```bash
 useradd --create-home --shell /bin/bash netdeploy
@@ -296,7 +296,7 @@ usermod -aG docker netdeploy
 chown -R netdeploy:netdeploy /opt/netinventory
 ```
 
-Agrega la etiqueta `netinventory` durante la configuración del runner; el runner debe estar en línea para que el job de despliegue se ejecute. El grupo `docker` concede privilegios equivalentes a root, así que limita el acceso a la cuenta de despliegue. No compartas el token temporal de registro.
+El runner debe estar en línea para que el job de despliegue se ejecute. El grupo `docker` concede privilegios equivalentes a root, así que limita el acceso a la cuenta de despliegue. No compartas el token temporal de registro.
 
 En **Settings → Secrets and variables → Actions → Variables**, agrega `DEPLOY_ENABLED` con valor `true` y `DEPLOY_PATH` con valor `/opt/netinventory`. No se requieren secretos SSH: el runner se conecta a GitHub de forma saliente y ejecuta el despliegue localmente. La carpeta de despliegue debe ser un clon limpio de `main`, y el usuario del runner necesita acceso de lectura al repositorio.
 
