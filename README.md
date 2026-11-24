@@ -261,11 +261,11 @@ En Docker Compose, `DATABASE_URL`, `JWT_SECRET_KEY` y `JWT_ALGORITHM` configuran
 
 Las credenciales y la clave JWT incluidas en `docker-compose.yml` son exclusivamente valores locales de desarrollo. El backend no inicia si `JWT_SECRET_KEY` no está configurada con al menos 32 bytes. Antes de desplegar en un entorno real, genera una clave aleatoria y privada, configúrala como secreto de entorno, no publiques credenciales y sirve la aplicación mediante HTTPS. La cuenta inicial también usa una contraseña conocida: cámbiala antes de cualquier uso fuera del entorno local.
 
-## CI/CD y despliegue en Debian
+## CI/CD y despliegue en Kali Linux
 
-El workflow `.github/workflows/ci-cd.yml` se ejecuta en Pull Requests y al subir cambios a `main`. Comprueba lint y compilación del frontend, sintaxis del backend, configuración Compose de producción y construcción de las imágenes. En este momento no ejecuta pruebas unitarias del backend, porque la suite local no se ha agregado al repositorio. El despliegue a Debian permanece desactivado hasta que se configure la variable `DEPLOY_ENABLED` como `true` en GitHub Actions.
+El workflow `.github/workflows/ci-cd.yml` se ejecuta en Pull Requests y al subir cambios a `main`. Comprueba lint y compilación del frontend, sintaxis del backend, configuración Compose de producción y construcción de las imágenes. En este momento no ejecuta pruebas unitarias del backend, porque la suite local no se ha agregado al repositorio. El despliegue a Kali se ejecuta en un runner autohospedado y permanece desactivado hasta que se configure la variable `DEPLOY_ENABLED` como `true` en GitHub Actions. Una vez configurado, despliega al subir cambios a `main` o al ejecutar manualmente el workflow en esa rama.
 
-`docker-compose.prod.yml` sirve el frontend compilado mediante Nginx, reenvía `/api` al backend y no publica PostgreSQL ni Redis. En la VM Debian instala Docker Engine y el complemento Docker Compose, clona este repositorio en una ruta fija (por ejemplo, `/opt/netinventory`) y crea allí un archivo `.env` con permisos restringidos:
+`docker-compose.prod.yml` sirve el frontend compilado mediante Nginx, reenvía `/api` al backend y no publica PostgreSQL ni Redis. En Kali instala Docker Engine y Docker Compose v2, clona este repositorio en `/opt/netinventory` y crea allí un archivo `.env` con permisos restringidos:
 
 ```dotenv
 POSTGRES_DB=netinventory_db
@@ -278,7 +278,7 @@ FRONTEND_PORT=8080
 MONITORING_INTERVAL_SECONDS=60
 ```
 
-En Debian genera por separado los valores de contraseña y clave JWT con `openssl rand -hex 32`; usa la contraseña hexadecimal también en `DATABASE_URL` y `POSTGRES_PASSWORD`. No subas `.env` al repositorio. Inicia el entorno en la VM con:
+En Kali genera por separado los valores de contraseña y clave JWT con `openssl rand -hex 32`; usa la contraseña hexadecimal también en `DATABASE_URL` y `POSTGRES_PASSWORD`. No subas `.env` al repositorio. Inicia el entorno en la VM con:
 
 ```bash
 chmod 600 .env
@@ -288,12 +288,17 @@ docker compose --env-file .env -f docker-compose.prod.yml ps
 
 El sitio queda disponible en `http://<IP-de-la-VM>:8080`. Para exponerlo públicamente configura HTTPS mediante un proxy inverso y no abras los puertos de PostgreSQL o Redis. Este Compose crea un volumen de producción separado; no copia automáticamente la base de datos local.
 
-Para activar el despliegue automático, agrega en GitHub, en **Settings → Secrets and variables → Actions**:
+Para habilitar el runner autohospedado, abre el repositorio en GitHub y ve a **Settings → Actions → Runners → New self-hosted runner**. Selecciona Linux x64 y sigue las instrucciones mostradas en Kali. Registra el runner con la etiqueta adicional `netinventory`, igual a la requerida por el workflow, y ejecútalo como servicio bajo un usuario no root. Ese usuario necesita acceso de escritura a `/opt/netinventory` y permiso para ejecutar Docker. Por ejemplo, con una cuenta de despliegue dedicada:
 
-- Variable `DEPLOY_ENABLED`: valor `true`.
-- Secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY` y `DEPLOY_KNOWN_HOSTS`.
+```bash
+useradd --create-home --shell /bin/bash netdeploy
+usermod -aG docker netdeploy
+chown -R netdeploy:netdeploy /opt/netinventory
+```
 
-La clave pública correspondiente a `DEPLOY_SSH_KEY` debe estar autorizada para el usuario de despliegue en Debian. `DEPLOY_KNOWN_HOSTS` debe contener la clave de host SSH de la VM, obtenida y verificada por un canal confiable. El usuario remoto necesita ejecutar Docker Compose y la carpeta de despliegue debe ser un clon limpio de la rama `main`; si el repositorio es privado, configura también una deploy key de lectura de GitHub en la VM. El runner alojado por GitHub necesita poder alcanzar la VM por SSH; si la VM solo tiene una dirección privada, se requiere un runner autohospedado o una alternativa de conectividad privada.
+Agrega la etiqueta `netinventory` durante la configuración del runner; el runner debe estar en línea para que el job de despliegue se ejecute. El grupo `docker` concede privilegios equivalentes a root, así que limita el acceso a la cuenta de despliegue. No compartas el token temporal de registro.
+
+En **Settings → Secrets and variables → Actions → Variables**, agrega `DEPLOY_ENABLED` con valor `true` y `DEPLOY_PATH` con valor `/opt/netinventory`. No se requieren secretos SSH: el runner se conecta a GitHub de forma saliente y ejecuta el despliegue localmente. La carpeta de despliegue debe ser un clon limpio de `main`, y el usuario del runner necesita acceso de lectura al repositorio.
 
 ## Desarrollo local sin Docker
 

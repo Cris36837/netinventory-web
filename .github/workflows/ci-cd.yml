@@ -67,27 +67,17 @@ jobs:
         run: docker build -t netinventory-frontend:ci -f frontend/Dockerfile.prod frontend
 
   deploy:
-    name: Deploy to Debian
+    name: Deploy to Kali
     needs: [frontend, backend, production-images]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, linux, x64, netinventory]
     steps:
-      - name: Configure SSH
+      - name: Update Kali deployment
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
         run: |
           set -euo pipefail
-          install -m 700 -d "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/netinventory_deploy"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/netinventory_deploy" "$HOME/.ssh/known_hosts"
-      - name: Update Debian deployment
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          set -euo pipefail
-          remote_command="cd '$DEPLOY_PATH' && git pull --ff-only origin main && docker compose --env-file .env -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180 && docker compose --env-file .env -f docker-compose.prod.yml exec -T backend python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=10)'"
-          ssh -i "$HOME/.ssh/netinventory_deploy" -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command"
+          : "${DEPLOY_PATH:?Configure the DEPLOY_PATH Actions variable}"
+          git -C "$DEPLOY_PATH" pull --ff-only origin main
+          docker compose --env-file "$DEPLOY_PATH/.env" -f "$DEPLOY_PATH/docker-compose.prod.yml" up -d --build --wait --wait-timeout 180
+          docker compose --env-file "$DEPLOY_PATH/.env" -f "$DEPLOY_PATH/docker-compose.prod.yml" exec -T backend python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=10)'
