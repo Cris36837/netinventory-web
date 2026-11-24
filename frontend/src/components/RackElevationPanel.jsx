@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const RackElevationPanel = () => {
-  const [rackSize, setRackSize] = useState(42);
+  const rackSize = 42;
   const [mountedAssets, setMountedAssets] = useState([
     { id: 1, name: 'Core-Switch-01', ru: 40, height: 2, type: 'Switch', position: 'front' },
     { id: 2, name: 'Server-Web-01', ru: 25, height: 4, type: 'Servidor', position: 'front' },

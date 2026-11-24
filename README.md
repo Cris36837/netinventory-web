@@ -261,6 +261,40 @@ En Docker Compose, `DATABASE_URL`, `JWT_SECRET_KEY` y `JWT_ALGORITHM` configuran
 
 Las credenciales y la clave JWT incluidas en `docker-compose.yml` son exclusivamente valores locales de desarrollo. El backend no inicia si `JWT_SECRET_KEY` no está configurada con al menos 32 bytes. Antes de desplegar en un entorno real, genera una clave aleatoria y privada, configúrala como secreto de entorno, no publiques credenciales y sirve la aplicación mediante HTTPS. La cuenta inicial también usa una contraseña conocida: cámbiala antes de cualquier uso fuera del entorno local.
 
+## CI/CD y despliegue en Debian
+
+El workflow `.github/workflows/ci-cd.yml` se ejecuta en Pull Requests y al subir cambios a `main`. Comprueba lint y compilación del frontend, sintaxis del backend, configuración Compose de producción y construcción de las imágenes. En este momento no ejecuta pruebas unitarias del backend, porque la suite local no se ha agregado al repositorio. El despliegue a Debian permanece desactivado hasta que se configure la variable `DEPLOY_ENABLED` como `true` en GitHub Actions.
+
+`docker-compose.prod.yml` sirve el frontend compilado mediante Nginx, reenvía `/api` al backend y no publica PostgreSQL ni Redis. En la VM Debian instala Docker Engine y el complemento Docker Compose, clona este repositorio en una ruta fija (por ejemplo, `/opt/netinventory`) y crea allí un archivo `.env` con permisos restringidos:
+
+```dotenv
+POSTGRES_DB=netinventory_db
+POSTGRES_USER=netuser
+POSTGRES_PASSWORD=REEMPLAZAR_POR_UN_SECRETO_HEX
+DATABASE_URL=postgresql+asyncpg://netuser:REEMPLAZAR_POR_EL_MISMO_SECRETO_HEX@postgres:5432/netinventory_db
+JWT_SECRET_KEY=REEMPLAZAR_POR_OTRO_SECRETO_HEX_DE_64_CARACTERES
+JWT_ALGORITHM=HS256
+FRONTEND_PORT=8080
+MONITORING_INTERVAL_SECONDS=60
+```
+
+En Debian genera por separado los valores de contraseña y clave JWT con `openssl rand -hex 32`; usa la contraseña hexadecimal también en `DATABASE_URL` y `POSTGRES_PASSWORD`. No subas `.env` al repositorio. Inicia el entorno en la VM con:
+
+```bash
+chmod 600 .env
+docker compose --env-file .env -f docker-compose.prod.yml up --build -d
+docker compose --env-file .env -f docker-compose.prod.yml ps
+```
+
+El sitio queda disponible en `http://<IP-de-la-VM>:8080`. Para exponerlo públicamente configura HTTPS mediante un proxy inverso y no abras los puertos de PostgreSQL o Redis. Este Compose crea un volumen de producción separado; no copia automáticamente la base de datos local.
+
+Para activar el despliegue automático, agrega en GitHub, en **Settings → Secrets and variables → Actions**:
+
+- Variable `DEPLOY_ENABLED`: valor `true`.
+- Secretos `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY` y `DEPLOY_KNOWN_HOSTS`.
+
+La clave pública correspondiente a `DEPLOY_SSH_KEY` debe estar autorizada para el usuario de despliegue en Debian. `DEPLOY_KNOWN_HOSTS` debe contener la clave de host SSH de la VM, obtenida y verificada por un canal confiable. El usuario remoto necesita ejecutar Docker Compose y la carpeta de despliegue debe ser un clon limpio de la rama `main`; si el repositorio es privado, configura también una deploy key de lectura de GitHub en la VM. El runner alojado por GitHub necesita poder alcanzar la VM por SSH; si la VM solo tiene una dirección privada, se requiere un runner autohospedado o una alternativa de conectividad privada.
+
 ## Desarrollo local sin Docker
 
 Primero inicia PostgreSQL con los valores de desarrollo del servicio `postgres` en Compose y asegúrate de que la base `netinventory_db` ya fue inicializada con `database/init.sql`:

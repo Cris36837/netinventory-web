@@ -1,0 +1,93 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  backend:
+    name: Backend dependency and syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+      - name: Compile backend modules
+        working-directory: backend
+        run: python -m compileall -q app
+
+  production-images:
+    name: Validate production Compose and images
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: netinventory_ci
+      POSTGRES_USER: netinventory_ci
+      POSTGRES_PASSWORD: ci-only-password
+      DATABASE_URL: postgresql+asyncpg://netinventory_ci:ci-only-password@postgres:5432/netinventory_ci
+      JWT_SECRET_KEY: ci-only-secret-key-not-for-deployments-0000000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose
+        run: docker compose -f docker-compose.prod.yml config --quiet
+      - name: Build backend image
+        run: docker build -t netinventory-backend:ci -f backend/Dockerfile backend
+      - name: Build production frontend image
+        run: docker build -t netinventory-frontend:ci -f frontend/Dockerfile.prod frontend
+
+  deploy:
+    name: Deploy to Debian
+    needs: [frontend, backend, production-images]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/netinventory_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/netinventory_deploy" "$HOME/.ssh/known_hosts"
+      - name: Update Debian deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          remote_command="cd '$DEPLOY_PATH' && git pull --ff-only origin main && docker compose --env-file .env -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180 && docker compose --env-file .env -f docker-compose.prod.yml exec -T backend python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=10)'"
+          ssh -i "$HOME/.ssh/netinventory_deploy" -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "$remote_command"
